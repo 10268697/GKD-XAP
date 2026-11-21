@@ -1,0 +1,209 @@
+package li.gkd.app.util
+
+import android.content.Intent
+import android.os.Bundle
+import android.util.Log
+import com.hjq.device.compat.DeviceBrand
+import com.hjq.device.compat.DeviceMarketName
+import com.hjq.device.compat.DeviceOs
+import li.gkd.app.META
+import li.gkd.app.app
+import li.songe.codeorigin.CallSite
+import java.io.File
+import li.gkd.app.data.backup.SerialLogWriter
+import li.gkd.app.data.backup.DiagnosticFiles
+import kotlin.time.Duration.Companion.days
+
+object LogUtils {
+    fun d(
+        vararg args: Any?,
+        @CallSite loc: String = "",
+        @CallSite("{file}") fileName: String = "",
+        tag: String = fileName.substringBeforeLast('.'),
+    ) {
+        val name = Thread.currentThread().name
+        val actualLoc = loc.removePrefix("li.gkd.app.")
+        val texts = args.map { DiagnosticFiles.redact(stringify(it)) }
+        if (META.debuggable) {
+            val msg = buildString {
+                append("$name, $actualLoc")
+                texts.forEachIndexed { i, text ->
+                    if (texts.size == 1) {
+                        append("\n")
+                    } else {
+                        append("\n[$i]: ")
+                    }
+                    append(text)
+                }
+            }
+            Log.d(tag, msg)
+        }
+        val t = System.currentTimeMillis()
+        logFileExecutor.execute {
+            logToFile(tag, name, actualLoc, texts, t)
+        }
+    }
+
+    /** Wait for prior queued records; historical write loss does not prevent future draining. */
+    fun flush(timeoutMillis: Long = 5_000): Boolean = logFileExecutor.flush(timeoutMillis)
+
+    internal fun flushStatus(timeoutMillis: Long = 5_000): li.gkd.app.data.backup.LogFlushStatus =
+        logFileExecutor.flushStatus(timeoutMillis)
+}
+
+private val logFileExecutor = SerialLogWriter { Log.e("GkdLog", "Log persistence failed", it) }
+private const val MAX_LOG_KEEP_DAYS = 7
+val deviceInfoDesc by lazy {
+    listOf(
+        android.os.Build.MANUFACTURER,
+        android.os.Build.MODEL,
+        DeviceBrand.getBrandName(),
+        DeviceOs.getOsName() + DeviceOs.getOsVersionName() + DeviceOs.getOsBigVersionCode(),
+        DeviceMarketName.getMarketName(app)
+    ).joinToString("/")
+}
+private val deviceInfoText by lazy {
+    buildString {
+        append("Android: ${android.os.Build.VERSION.RELEASE} (${android.os.Build.VERSION.SDK_INT})\n")
+        append("Device: ${deviceInfoDesc}\n")
+        append("App: ${META.versionName} (${META.versionCode})\n")
+    }
+}
+
+private const val MAX_LOG_ENTRY_BYTES = 64 * 1024
+private const val MAX_LOG_FILE_BYTES = 2 * 1024 * 1024L
+private const val MAX_LOG_TOTAL_BYTES = 16 * 1024 * 1024L
+private const val LOG_TRUNCATED_MARK = "\n...[单条日志超过 64KB，已截断]...\n"
+
+private fun logToFile(tag: String, name: String, loc: String, texts: List<String>, t: Long) {
+    val dateText = t.format("yyyyMMdd")
+    val baseFile = FolderUtils.logFolder.resolve("gkd-$dateText.log")
+    if (!baseFile.exists()) {
+        // 沿用原清理逻辑：新一天首次写时，删 7 天前的文件（按 lastModified 判断，
+        // 分片文件同样命中，不会漏删）
+        val files = FolderUtils.logFolder.listFiles()
+        if (files != null && files.size >= MAX_LOG_KEEP_DAYS) {
+            files.forEach {
+                if (t - it.lastModified() > MAX_LOG_KEEP_DAYS.days.inWholeMilliseconds) {
+                    it.delete()
+                }
+            }
+        }
+    }
+    val sb = StringBuilder()
+    sb.append(t.format("HH:mm:ss.SSS"))
+    sb.append(" $tag, $name, $loc")
+    if (texts.size == 1) {
+        sb.append('\n')
+        sb.append(texts[0])
+    } else {
+        texts.forEachIndexed { i, text ->
+            sb.append("\n[$i]: ")
+            sb.append(text)
+        }
+    }
+    sb.append("\n\n")
+    var entry = sb.toString()
+    // 单条上限 64KB（按 UTF-8 字节计），超出截断并留标记
+    var entryBytes = entry.toByteArray(Charsets.UTF_8)
+    if (entryBytes.size > MAX_LOG_ENTRY_BYTES) {
+        val markBytes = LOG_TRUNCATED_MARK.toByteArray(Charsets.UTF_8)
+        entry = String(
+            entryBytes,
+            0,
+            MAX_LOG_ENTRY_BYTES - markBytes.size,
+            Charsets.UTF_8,
+        ) + LOG_TRUNCATED_MARK
+        entryBytes = entry.toByteArray(Charsets.UTF_8)
+    }
+    // 单文件上限 2MB：写满后滚动到 gkd-yyyyMMdd-2.log、-3.log……
+    // 从当天现有分片的最大编号接着写：总量修剪可能删掉中间分片，
+    // 若按「第一个缺号」选文件，会重建旧编号导致编号序与时间序对不上。
+    var shard = 1
+    FolderUtils.logFolder.listFiles()?.forEach { existing ->
+        val number = when {
+            existing.name == baseFile.name -> 1
+            existing.name.startsWith("gkd-$dateText-") && existing.name.endsWith(".log") ->
+                existing.name.removePrefix("gkd-$dateText-").removeSuffix(".log").toIntOrNull()
+            else -> null
+        }
+        if (number != null && number > shard) shard = number
+    }
+    var file = if (shard == 1) {
+        baseFile
+    } else {
+        FolderUtils.logFolder.resolve("gkd-$dateText-$shard.log")
+    }
+    if (file.exists() && file.length() + entryBytes.size > MAX_LOG_FILE_BYTES) {
+        shard++
+        file = FolderUtils.logFolder.resolve("gkd-$dateText-$shard.log")
+    }
+    if (!file.exists()) {
+        file.appendText(buildString {
+            append("=== Log ===\n")
+            append("Date: ${t.format("yyyy-MM-dd HH:mm:ss.SSS")}\n")
+            append(deviceInfoText)
+            append("=== Log ===\n\n")
+        })
+    }
+    file.appendText(entry)
+    trimLogFolderTotal(keep = file)
+}
+
+private var lastTrimAtMillis = 0L
+
+// 日志目录总量上限 16MB：超出时从最旧文件开始删，刚写入的文件不删。
+// 总量是软性护栏：扫描整个目录有开销，节流到最多每 5 秒查一次，
+// 高频写日志时允许短暂小幅超出。
+private fun trimLogFolderTotal(keep: File) {
+    val now = android.os.SystemClock.elapsedRealtime()
+    if (now - lastTrimAtMillis < 5_000) return
+    lastTrimAtMillis = now
+    val files = FolderUtils.logFolder.listFiles()?.filter { it.isFile } ?: return
+    var totalBytes = files.sumOf { it.length() }
+    if (totalBytes <= MAX_LOG_TOTAL_BYTES) return
+    files.filter { it.absolutePath != keep.absolutePath }
+        .sortedBy { it.lastModified() }
+        .forEach { oldFile ->
+            if (totalBytes <= MAX_LOG_TOTAL_BYTES) return
+            val len = oldFile.length()
+            if (oldFile.delete()) {
+                totalBytes -= len
+            }
+        }
+}
+
+private fun stringify(arg: Any?): String = when (arg) {
+    is Bundle -> {
+        val sb = StringBuilder()
+        sb.append("Bundle{")
+        val keys = arg.keySet()
+        keys.forEachIndexed { index, key ->
+            @Suppress("DEPRECATION")
+            val value = arg.get(key)
+            sb.append("$key=${stringify(value)}")
+            if (index < keys.size - 1) {
+                sb.append(",")
+            }
+        }
+        sb.append("}")
+        sb.toString()
+    }
+
+    is Intent -> {
+        val sb = StringBuilder()
+        sb.append("Intent{")
+        arg.action?.let { sb.append("action=$it,") }
+        arg.data?.let { sb.append("data=$it,") }
+        arg.type?.let { sb.append("type=$it,") }
+        arg.component?.let { sb.append("component=$it,") }
+        arg.categories?.let { sb.append("categories=$it,") }
+        arg.extras?.let { sb.append("extras=${stringify(it)}") }
+        sb.append("}")
+        sb.toString()
+    }
+
+    is Throwable -> Log.getStackTraceString(arg)
+
+    else -> arg.toString()
+}

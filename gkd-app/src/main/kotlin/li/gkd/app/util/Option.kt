@@ -1,0 +1,246 @@
+package li.gkd.app.util
+
+import androidx.compose.ui.graphics.vector.ImageVector
+import li.gkd.app.text.UiStrings
+import li.gkd.app.ui.component.GkIcons
+
+sealed interface Option<T> {
+    val value: T
+    val label: String
+    val options: List<Option<T>>
+}
+
+sealed interface OptionIcon {
+    val icon: ImageVector
+}
+
+/** 下拉菜单里显示的长文案（label 给设置项右侧摘要用，menuLabel 给菜单项用）。 */
+sealed interface OptionMenuLabel {
+    val menuLabel: String
+}
+
+fun <V, T : Option<V>> Iterable<T>.findOption(value: V): T {
+    return find { it.value == value } ?: first()
+}
+
+sealed class SnapshotDisplayModeOption(override val value: Int, override val label: String) : Option<Int> {
+    override val options get() = objects
+
+    data object ByTime : SnapshotDisplayModeOption(1, UiStrings.snapshot_view_time)
+    data object ByApp : SnapshotDisplayModeOption(2, UiStrings.snapshot_view_app)
+
+    companion object {
+        val objects by lazy { listOf(ByTime, ByApp) }
+    }
+}
+
+sealed class AppSortOption(override val value: Int, override val label: String) : Option<Int> {
+    override val options get() = objects
+
+    data object ByAppName : AppSortOption(0, UiStrings.app_sort_name)
+    data object ByActionTime : AppSortOption(2, UiStrings.app_sort_recent_trigger)
+    data object ByUsedTime : AppSortOption(3, UiStrings.app_sort_recent_used)
+
+    companion object {
+        val objects by lazy { listOf(ByAppName, ByUsedTime, ByActionTime) }
+    }
+}
+
+sealed class UpdateTimeOption(
+    override val value: Long,
+    override val label: String
+) : Option<Long> {
+    override val options get() = objects
+
+    data object Pause : UpdateTimeOption(-1, UiStrings.action_pause)
+    data object Everyday : UpdateTimeOption(24 * 60 * 60_000, UiStrings.update_interval_daily)
+    data object Every3Days : UpdateTimeOption(24 * 60 * 60_000 * 3, UiStrings.update_interval_three_days)
+    data object Every7Days : UpdateTimeOption(24 * 60 * 60_000 * 7, UiStrings.update_interval_weekly)
+
+    companion object {
+        val objects by lazy { listOf(Pause, Everyday, Every3Days, Every7Days) }
+    }
+}
+
+sealed class DarkThemeOption(
+    override val value: Boolean?,
+    override val label: String,
+    override val icon: ImageVector
+) : Option<Boolean?>, OptionIcon {
+    override val options get() = objects
+
+    data object FollowSystem : DarkThemeOption(null, UiStrings.theme_auto, GkIcons.BrightnessAuto)
+    data object AlwaysEnable : DarkThemeOption(true, UiStrings.theme_dark, GkIcons.DarkMode)
+    data object AlwaysDisable : DarkThemeOption(false, UiStrings.theme_light, GkIcons.LightMode)
+
+    companion object {
+        val objects by lazy { listOf(FollowSystem, AlwaysDisable, AlwaysEnable) }
+    }
+}
+
+sealed class EnableGroupOption(
+    override val value: Boolean?,
+    override val label: String
+) : Option<Boolean?> {
+    override val options get() = objects
+
+    data object FollowSubs : EnableGroupOption(null, UiStrings.category_follow_subscription)
+    data object AllEnable : EnableGroupOption(true, UiStrings.rules_enable_all)
+    data object AllDisable : EnableGroupOption(false, UiStrings.settings_all_off)
+
+    companion object {
+        val objects by lazy { listOf(FollowSubs, AllEnable, AllDisable) }
+    }
+}
+
+sealed class RuleSortOption(override val value: Int, override val label: String) : Option<Int> {
+    override val options get() = objects
+
+    data object ByDefault : RuleSortOption(0, UiStrings.rule_sort_default)
+    data object ByActionTime : RuleSortOption(1, UiStrings.app_sort_recent_trigger)
+    data object ByRuleName : RuleSortOption(2, UiStrings.rule_sort_name)
+
+    companion object {
+        val objects by lazy { listOf(ByDefault, ByActionTime, ByRuleName) }
+    }
+}
+
+sealed class UpdateChannelOption(
+    override val value: Int,
+    override val label: String,
+    val url: String
+) : Option<Int> {
+    override val options get() = objects
+
+    data object Stable : UpdateChannelOption(
+        0,
+        UiStrings.update_channel_stable,
+        "https://api.github.com/repos/84593320z/GKD-XA/releases/latest"
+    )
+
+    // 不能也写成 releases/latest：GitHub 的 latest 按定义排除 prerelease，测试通道会和稳定通道
+    // 拿到同一个响应，这个设置项等于失效。
+    //
+    // 也不能改成 /releases?per_page=N（数组）：已经装机的 1.4.2+ 客户端按 URL 形态分流，
+    // 认 api.github.com/repos/ 就用单个 release 对象反序列化，收到数组直接解析失败 ——
+    // 修一个问题就得让用户重装一次，和上次改更新通道撞的是同一堵墙。
+    // version/beta.json 走的是 NewVersion 那条分流，新旧客户端都能读，且仓库里已经在维护它。
+    data object Beta : UpdateChannelOption(
+        1,
+        UiStrings.update_channel_beta,
+        "https://raw.githubusercontent.com/84593320z/GKD-XA/main/version/beta.json"
+    )
+
+    companion object {
+        val objects by lazy { listOf(Stable, Beta) }
+    }
+}
+
+sealed interface BinaryOption : Option<Int> {
+    fun include(flag: Int): Boolean = (value and flag) != 0
+    fun invert(flag: Int): Int = value xor flag
+
+    companion object {
+        fun combine(options: Collection<BinaryOption>): Int {
+            return options.fold(0) { a, b -> a or b.value }
+        }
+    }
+}
+
+sealed class AppGroupOption(
+    override val value: Int,
+    override val label: String
+) : BinaryOption {
+    override val options get() = allObjects
+
+    data object SystemGroup : AppGroupOption(1 shl 0, UiStrings.apps_system)
+    data object UserGroup : AppGroupOption(1 shl 1, UiStrings.apps_user)
+    data object UnInstalledGroup : AppGroupOption(1 shl 2, UiStrings.apps_not_installed)
+
+    companion object {
+        val normalObjects by lazy { listOf(SystemGroup, UserGroup) }
+        val allObjects by lazy { listOf(SystemGroup, UserGroup, UnInstalledGroup) }
+    }
+}
+
+sealed class AutomatorModeOption(
+    override val value: Int,
+    override val label: String,
+) : Option<Int> {
+    override val options get() = objects
+
+    data object A11yMode : AutomatorModeOption(1, UiStrings.a11y_label)
+    data object AutomationMode : AutomatorModeOption(2, UiStrings.automation_label)
+
+    companion object {
+        val objects by lazy { listOf(A11yMode, AutomationMode) }
+    }
+}
+
+sealed class ActionTipStyleOption(
+    override val value: Int,
+    override val label: String,
+    override val menuLabel: String,
+) : Option<Int>, OptionMenuLabel {
+    override val options get() = objects
+
+    data object Overlay : ActionTipStyleOption(0, "悬浮窗提示", "悬浮窗")
+    data object SystemToast : ActionTipStyleOption(1, "系统 Toast", "Toast")
+    data object LiveNotif : ActionTipStyleOption(2, "实时通知（流体云/超级岛）", "实时通知")
+
+    companion object {
+        val objects by lazy { listOf(Overlay, SystemToast, LiveNotif) }
+    }
+}
+
+sealed class ActionTipLiveDurationOption(
+    override val value: Int,
+    override val label: String,
+    override val menuLabel: String,
+) : Option<Int>, OptionMenuLabel {
+    override val options get() = objects
+
+    data object Sec3 : ActionTipLiveDurationOption(3, "3 秒", "3 秒")
+    data object Sec5 : ActionTipLiveDurationOption(5, "5 秒", "5 秒")
+    data object Sec8 : ActionTipLiveDurationOption(8, "8 秒", "8 秒")
+    data object Sec15 : ActionTipLiveDurationOption(15, "15 秒", "15 秒")
+    data object Sec30 : ActionTipLiveDurationOption(30, "30 秒", "30 秒")
+    data object Sec60 : ActionTipLiveDurationOption(60, "60 秒", "60 秒")
+
+    companion object {
+        val objects by lazy { listOf(Sec3, Sec5, Sec8, Sec15, Sec30, Sec60) }
+
+        fun resolve(sec: Int): ActionTipLiveDurationOption =
+            objects.find { it.value == sec } ?: ActionTipLiveDurationCustom(sec)
+
+        fun labelOf(sec: Int): String = resolve(sec).label
+    }
+}
+
+private data class ActionTipLiveDurationCustom(
+    private val sec: Int,
+) : ActionTipLiveDurationOption(sec, "${sec} 秒", "${sec} 秒")
+
+sealed class AiProtocolOption(
+    override val value: String,
+    override val label: String,
+    val placeholder: String,
+    val newTitle: String,
+    val newSummary: String,
+) : Option<String> {
+    override val options get() = objects
+
+    data object OpenAI : AiProtocolOption(
+        "openai", "OpenAI 兼容", "https://api.openai.com",
+        "OpenAI 兼容", "/chat/completions · /responses · 中转与自建网关",
+    )
+
+    data object Anthropic : AiProtocolOption(
+        "anthropic", "Anthropic", "https://api.anthropic.com",
+        "Anthropic", "Claude Messages 接口",
+    )
+
+    companion object {
+        val objects by lazy { listOf(OpenAI, Anthropic) }
+    }
+}

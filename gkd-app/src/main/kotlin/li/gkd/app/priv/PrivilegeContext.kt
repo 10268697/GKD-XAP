@@ -1,0 +1,304 @@
+package li.gkd.app.priv
+
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
+import li.gkd.aidl.IInstallResultListener
+import li.gkd.aidl.IUserService
+import android.Manifest
+import android.accessibilityservice.AccessibilityServiceInfo
+import android.accessibilityservice.IAccessibilityServiceClient
+import android.app.AppOpsManager
+import android.app.AppOpsManagerHidden
+import android.content.ComponentName
+import android.content.Intent
+import android.content.IntentSender
+import android.content.pm.PackageInfo
+import android.graphics.Bitmap
+import android.os.DeadObjectException
+import android.os.IBinder
+import android.os.Process
+import com.hjq.permissions.permission.dangerous.GetInstalledAppsPermission
+import li.gkd.app.META
+import li.gkd.app.MainActivity
+import li.gkd.app.app
+import li.gkd.app.data.UserInfo
+import li.gkd.app.permission.PermissionStates
+import li.gkd.app.util.AndroidTarget
+import li.gkd.app.util.LogUtils
+import priv.kit.core.Privilege
+import priv.kit.core.PrivilegeServerInfo
+import priv.kit.core.PrivilegeUserServiceConnection
+import priv.kit.core.command.PrivilegeCommand
+
+class PrivilegeContext private constructor(
+    val serverInfo: PrivilegeServerInfo,
+    private val userServiceConnection: PrivilegeUserServiceConnection,
+) {
+    val serverLifecycleBinder = serverInfo.lifecycleBinder
+    val installCallbackBinder: IBinder get() = userServiceConnection.binder
+    private val packageManager = CompatPackageManager()
+    private val userManager = CompatUserManager()
+    private val activityManager = CompatActivityManager()
+    private val appOpsService = CompatAppOpsService()
+    private val inputManager = CompatInputManager()
+    private val a11yManager = CompatAccessibilityManager()
+    private val wmManager = CompatWindowManager()
+    private val userService = IUserService.Stub.asInterface(userServiceConnection.binder)
+    private var taskStackListenerRegistered = false
+    private var writeSecureSettingsAttempted = false
+
+    /**
+     * 为特权安装创建结果回调 sender（上游 8225f46a）：安装成功后由服务端进程里的
+     * InstallRestartReceiver 用它拉起 MainActivity 并把结果回传给 listener。
+     */
+    fun createInstallResultSender(
+        callingPackage: String,
+        listener: IInstallResultListener,
+    ): IntentSender =
+        userService.createInstallResultSender(
+            Intent.makeRestartActivityTask(
+                ComponentName(META.appId, MainActivity::class.java.name),
+            ),
+            callingPackage,
+            currentUserId,
+            listener,
+        )
+
+    private suspend fun initialize() {
+        activityManager.value.registerTaskStackListener(CompatTaskStackListener)
+        taskStackListenerRegistered = true
+        grantSelf()
+        ensureWriteSecureSettings()
+    }
+
+    suspend fun destroy() {
+        try {
+            if (taskStackListenerRegistered && Privilege.pingServer()) {
+                try {
+                    activityManager.value.unregisterTaskStackListener(CompatTaskStackListener)
+                } catch (e: DeadObjectException) {
+                    // ping 之后服务端仍可能先死，清理阶段遇到死 Binder 忽略即可，
+                    // 别让它掩盖 create() 清理路径上的原始异常（对齐上游 d3ad0521）
+                    LogUtils.d(e, "destroy: unregisterTaskStackListener 时特权服务已死亡，忽略")
+                }
+                taskStackListenerRegistered = false
+            }
+        } finally {
+            try {
+                userServiceConnection.unbind()
+            } catch (e: DeadObjectException) {
+                LogUtils.d(e, "destroy: unbind 时特权服务已死亡，忽略")
+            }
+        }
+    }
+
+    fun grantSelf() {
+        if (Privilege.isPermissionRestricted()) return
+        allowAllSelfMode()
+        allowAllSelfPermission()
+    }
+
+    /**
+     * priv-kit 在「服务端不是 root 且没有 GRANT_RUNTIME_PERMISSIONS」时会跳过授权
+     * （Privilege.grantRuntimePermissionForRuntime 直接 return false），Shizuku / ADB 启动的
+     * 服务端正好落在这一支，于是 grantSelf() 拿不到 WRITE_SECURE_SETTINGS。
+     *
+     * 这里改成让特权服务执行一条 pm grant：shell 自己持有 GRANT_RUNTIME_PERMISSIONS，
+     * 该权限一旦授予会持久化，后续开机自愈不再依赖特权服务在线。
+     */
+    suspend fun ensureWriteSecureSettings() {
+        val permission = Manifest.permission.WRITE_SECURE_SETTINGS
+        if (app.checkGrantedPermission(permission)) return
+        // 每个特权连接只尝试一次：同步链会在开机/回前台反复触发，失败时不要每次都跑一条 shell
+        if (writeSecureSettingsAttempted) return
+        writeSecureSettingsAttempted = true
+
+        if (serverInfo.uid == 0) {
+            // root 分支正常会被 grantSelf() 覆盖，这里只做兜底重试。
+            try {
+                Privilege.grantRuntimePermission(
+                    packageName = META.appId,
+                    permissionName = permission,
+                )
+            } catch (e: Throwable) {
+                LogUtils.d(e, "ensureWriteSecureSettings root grant failed")
+            }
+            return
+        }
+
+        try {
+            val process = Privilege.startCommand(
+                PrivilegeCommand(listOf("pm", "grant", META.appId, permission))
+            )
+            try {
+                // 给 pm grant 设上限：这一步挂在同步链上，特权服务卡住不能把后续 arm 一起拖住
+                val result = withTimeout(5_000) { process.awaitResult() }
+                LogUtils.d("ensureWriteSecureSettings exitCode=${result.exitCode} stderr=${result.stderr.decodeToString().trim()}")
+            } finally {
+                process.close()
+            }
+        } catch (e: TimeoutCancellationException) {
+            LogUtils.d("ensureWriteSecureSettings timeout after 5s")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            LogUtils.d(e, "ensureWriteSecureSettings shell grant failed")
+        }
+    }
+
+    fun startForegroundService(intent: Intent) {
+        // 被启动的服务必须设置 android:exported="true"
+        // https://github.com/android-cs/16/blob/main/services/core/java/com/android/server/am/ActivityManagerShellCommand.java#L982
+        activityManager.startService(
+            intent = intent,
+            requireForeground = true,
+            callingPackage = "com.android.shell",
+            callingFeatureId = null,
+        )
+    }
+
+    fun topTask() = activityManager.getTasks().firstOrNull()
+    fun topCpn() = topTask()?.topActivity
+
+    fun getUsers(excludeDying: Boolean = true): List<UserInfo> {
+        return userManager.getUsers(excludeDying)
+    }
+
+    fun getInstalledPackagesAsUser(
+        flags: Int,
+        userId: Int = currentUserId,
+    ): List<PackageInfo> {
+        return packageManager.appPackageManager.getInstalledPackagesAsUser(flags, userId)
+    }
+
+    fun tap(x: Float, y: Float, duration: Long = 0): Boolean {
+        return inputManager.tap(x, y, duration)
+    }
+
+    fun swipe(
+        x1: Float,
+        y1: Float,
+        x2: Float,
+        y2: Float,
+        duration: Long,
+    ): Boolean {
+        return inputManager.swipe(x1, y1, x2, y2, duration)
+    }
+
+    fun keyevent(keyCode: Int): Boolean {
+        return inputManager.keyevent(keyCode)
+    }
+
+    fun registerUiTestAutomationService(
+        owner: IBinder,
+        client: IAccessibilityServiceClient,
+        info: AccessibilityServiceInfo,
+        userId: Int,
+        flags: Int,
+    ) {
+        a11yManager.registerUiTestAutomationService(owner, client, info, userId, flags)
+    }
+
+    fun unregisterUiTestAutomationService(client: IAccessibilityServiceClient) {
+        a11yManager.value.unregisterUiTestAutomationService(client)
+    }
+
+    fun isUiAutomationRunning(): Boolean = a11yManager.isUiAutomationRunning()
+
+    fun isRotationFrozen(): Boolean = wmManager.value.isRotationFrozen
+
+    fun getDefaultDisplayRotation(): Int = wmManager.value.defaultDisplayRotation
+
+    fun freezeRotation(rotation: Int, caller: String) {
+        wmManager.freezeRotation(rotation, caller)
+    }
+
+    fun thawRotation(caller: String) {
+        wmManager.thawRotation(caller)
+    }
+
+    fun isFocusedWindowSecure(appId: String): Boolean? {
+        return wmManager.isFocusedWindowSecure(appId)
+    }
+
+    fun screenshot(): Bitmap? {
+        return CompatScreenshot.capture(app, wmManager.value, userService)
+    }
+
+    private fun setAllowSelfMode(code: Int) {
+        val mode = appOpsService.value.checkOperation(code, Process.myUid(), META.appId)
+        if (mode != AppOpsManager.MODE_ALLOWED) {
+            appOpsService.value.setMode(
+                code,
+                Process.myUid(),
+                META.appId,
+                AppOpsManager.MODE_ALLOWED,
+            )
+        }
+    }
+
+    private fun allowAllSelfMode() {
+        setAllowSelfMode(AppOpsManagerHidden.OP_POST_NOTIFICATION)
+        setAllowSelfMode(AppOpsManagerHidden.OP_SYSTEM_ALERT_WINDOW)
+        if (AndroidTarget.Q) {
+            setAllowSelfMode(AppOpsManagerHidden.OP_ACCESS_ACCESSIBILITY)
+        }
+        if (AndroidTarget.TIRAMISU) {
+            setAllowSelfMode(AppOpsManagerHidden.OP_ACCESS_RESTRICTED_SETTINGS)
+        }
+        if (AndroidTarget.UPSIDE_DOWN_CAKE) {
+            setAllowSelfMode(AppOpsManagerHidden.OP_FOREGROUND_SERVICE_SPECIAL_USE)
+        }
+    }
+
+    private fun grantSelfPermission(name: String) {
+        if (app.checkGrantedPermission(name)) return
+        Privilege.grantRuntimePermission(
+            packageName = META.appId,
+            permissionName = name,
+        )
+    }
+
+    private fun allowAllSelfPermission() {
+        if (!PermissionStates.queryPackages.value) {
+            grantSelfPermission(GetInstalledAppsPermission.PERMISSION_NAME)
+        }
+        grantSelfPermission(PermissionStates.Manifest_permission_GET_APP_OPS_STATS)
+        grantSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
+        if (!AndroidTarget.Q) {
+            grantSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+        if (AndroidTarget.TIRAMISU) {
+            grantSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (AndroidTarget.CINNAMON_BUN) {
+            grantSelfPermission(Manifest.permission.ACCESS_LOCAL_NETWORK)
+        }
+    }
+
+    companion object {
+        suspend fun create(
+            serverInfo: PrivilegeServerInfo,
+            userServiceConnection: PrivilegeUserServiceConnection,
+        ): PrivilegeContext {
+            var context: PrivilegeContext? = null
+            try {
+                context = PrivilegeContext(serverInfo, userServiceConnection)
+                context.initialize()
+                return context
+            } catch (e: Throwable) {
+                try {
+                    if (context == null) {
+                        userServiceConnection.unbind()
+                    } else {
+                        context.destroy()
+                    }
+                } catch (cleanupError: Throwable) {
+                    e.addSuppressed(cleanupError)
+                }
+                throw e
+            }
+        }
+    }
+}

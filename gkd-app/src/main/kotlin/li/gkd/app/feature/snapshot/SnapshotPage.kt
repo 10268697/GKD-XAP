@@ -1,0 +1,693 @@
+package li.gkd.app.feature.snapshot
+
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import coil3.compose.AsyncImage
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import li.gkd.app.MainActivity
+import li.gkd.app.MainViewModel
+import li.gkd.app.core.state.Loadable
+import li.gkd.app.data.date
+import li.gkd.app.data.screenshotFile
+import li.gkd.app.data.snapshot.SnapshotRepository
+import li.gkd.app.store.AppStore
+import li.gkd.app.text.UiStrings
+import li.gkd.app.ui.component.GkAppNameText
+import li.gkd.app.ui.component.GkBatchActionMenuItem
+import li.gkd.app.ui.component.GkEmptyState
+import li.gkd.app.ui.component.GkFixedTimeText
+import li.gkd.app.ui.component.GkIconButton
+import li.gkd.app.ui.component.GkIconButtonDefaults
+import li.gkd.app.ui.component.GkIcons
+import li.gkd.app.ui.component.GkMultiSelectionActions
+import li.gkd.app.ui.component.GkMultiSelectionTopAppBar
+import li.gkd.app.ui.component.GkPageBottomSpace
+import li.gkd.app.ui.component.GkPageScaffold
+import li.gkd.app.ui.component.GkRetainedSheet
+import li.gkd.app.ui.component.GkTooltipBox
+import li.gkd.app.ui.component.SheetRequest
+import li.gkd.app.ui.component.rememberMultiSelectionState
+import li.gkd.app.ui.share.ListPlaceholder
+import li.gkd.app.ui.share.launchUi
+import li.gkd.app.ui.style.GkShapes
+import li.gkd.app.ui.style.readableTextColor
+import li.gkd.app.ui.style.lineHeightDp
+import li.gkd.app.util.IMPORT_SHORT_URL
+import li.gkd.app.util.SnapshotDisplayModeOption
+import li.gkd.app.util.ToastUtils.toast
+import li.gkd.app.util.findOption
+import li.gkd.app.util.format
+import li.gkd.app.util.getShowActivityId
+import li.gkd.db.Snapshot
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.Checkbox
+import top.yukonga.miuix.kmp.basic.CheckboxDefaults
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TooltipAnchorPosition
+import top.yukonga.miuix.kmp.basic.rememberTooltipState
+import top.yukonga.miuix.kmp.nav.core.NavKey
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+
+@Serializable
+data object SnapshotPageRoute : NavKey
+
+@Composable
+fun SnapshotPage() {
+    val context = LocalActivity.current as MainActivity
+    val mainVm = MainViewModel.requireCurrent()
+    val vm = viewModel<SnapshotVm>()
+    val loadableState by vm.uiState.collectAsStateWithLifecycle()
+    val settings by AppStore.storeFlow.collectAsStateWithLifecycle()
+    val displayMode = SnapshotDisplayModeOption.objects.findOption(settings.snapshotDisplayMode)
+    val actionScope = vm.scope
+    val state = loadableState.value
+    val firstLoading = loadableState is Loadable.Loading
+    val loadError = (loadableState as? Loadable.Failure)?.cause
+    val snapshots = state?.snapshots.orEmpty()
+    val appNames = state?.appNames.orEmpty()
+    val groups = remember(snapshots, appNames, displayMode) {
+        buildSnapshotGroups(snapshots, appNames, displayMode)
+    }
+    val displayedSnapshots = remember(groups) { groups.flatMap { it.snapshots } }
+    val previewSnapshotIds = remember(displayedSnapshots) { displayedSnapshots.map { it.id } }
+    fun openPreview(snapshotId: Long) {
+        mainVm.navigatePage(SnapshotPreviewRoute(snapshotId, previewSnapshotIds))
+    }
+    var actionRequest by remember { mutableStateOf<SheetRequest<Long>?>(null) }
+    val actionSnapshot = actionRequest?.let { request -> snapshots.find { it.id == request.key } }
+    val thumbnailVersions = remember { mutableStateMapOf<Long, Int>() }
+    val selectionState = rememberMultiSelectionState<Long>()
+    val allIds = remember(snapshots) { snapshots.mapTo(mutableSetOf()) { it.id } }
+    val selectedIds = selectionState.selectedKeys intersect allIds
+    val selectedSnapshots = displayedSnapshots.filter { it.id in selectedIds }
+    val hasUnlinkedSnapshots = remember(snapshots) { snapshots.any { it.githubAssetId == null } }
+    val pendingUploads = selectedSnapshots.filter { it.githubAssetId == null }
+    fun createUploadItems(targets: List<Snapshot>) = targets.map { snapshot ->
+        createSnapshotUploadItem(
+            snapshot = snapshot,
+            label = (appNames[snapshot.appId] ?: snapshot.appId) + " · " + snapshot.date,
+            vm = vm,
+        )
+    }
+    fun showLinks(targets: List<Snapshot>) {
+        val links = targets.mapNotNull { snapshot ->
+            snapshot.githubAssetId?.let { IMPORT_SHORT_URL + it }
+        }
+        if (links.isNotEmpty()) mainVm.textDialog.showText(links.joinToString("\n"))
+    }
+    fun showCurrentLinks(targetIds: List<Long>) {
+        mainVm.scope.launchUi {
+            val byId = SnapshotRepository.snapshots().first().associateBy { it.id }
+            showLinks(targetIds.mapNotNull(byId::get))
+        }
+    }
+    fun saveSelected(targets: List<Snapshot>, toAlbum: Boolean) {
+        actionScope.launchUi {
+            val title = if (toAlbum) UiStrings.action_save_to_album else UiStrings.action_save_to_downloads
+            val confirmation = if (toAlbum) {
+                UiStrings.snapshot_save_selected_to_album_confirmation(targets.size)
+            } else {
+                UiStrings.snapshot_save_selected_to_downloads_confirmation(targets.size)
+            }
+            if (!mainVm.dialogRequests.confirm(
+                    title = title,
+                    text = confirmation,
+                    confirmText = title,
+                )) return@launchUi
+            val actions = SnapshotActionHandler(mainVm = mainVm, vm = vm, activity = context)
+            val savedCount = if (toAlbum) {
+                actions.saveSelectedToAlbum(targets)
+            } else {
+                actions.saveSelectedToDownloads(targets)
+            } ?: return@launchUi
+            toast(if (savedCount == targets.size) {
+                UiStrings.snapshot_save_selected_success(savedCount)
+            } else {
+                UiStrings.snapshot_save_selected_partial(savedCount, targets.size - savedCount)
+            })
+        }
+    }
+    val gridState = rememberLazyGridState()
+    val scrollBehavior = MiuixScrollBehavior()
+    val uiScope = rememberCoroutineScope()
+    val resetScroll = {
+        uiScope.launch {
+            scrollBehavior.state.heightOffset = 0f
+            scrollBehavior.state.contentOffset = 0f
+            gridState.scrollToItem(0)
+        }
+        Unit
+    }
+    var wasEmpty by remember { mutableStateOf(groups.isEmpty()) }
+    SideEffect {
+        if (wasEmpty && groups.isNotEmpty()) {
+            scrollBehavior.state.heightOffset = 0f
+            scrollBehavior.state.contentOffset = 0f
+            gridState.requestScrollToItem(0)
+        }
+        wasEmpty = groups.isEmpty()
+    }
+
+    LaunchedEffect(allIds, loadableState) {
+        if (loadableState is Loadable.Ready) selectionState.retain(allIds)
+    }
+    BackHandler(selectionState.active) { selectionState.clear() }
+
+    GkPageScaffold(
+        externalScrollBehavior = scrollBehavior,
+        topBar = {
+            GkMultiSelectionTopAppBar(
+                selectedMode = selectionState.active,
+                selectedCount = selectedIds.size,
+                onExitSelection = selectionState::clear,
+                onNavigateBack = mainVm::popPage,
+                onTitleClick = resetScroll,
+                scrollBehavior = scrollBehavior, barColor = barColor,
+                title = { Text(UiStrings.snapshot_records) },
+                actions = { selectedMode ->
+                    if (selectedMode) {
+                        GkMultiSelectionActions(
+                            selectionState = selectionState,
+                            keys = allIds,
+                            enabled = loadableState is Loadable.Ready,
+                        ) { dismiss ->
+                            GkBatchActionMenuItem(
+                                text = UiStrings.action_save_to_downloads,
+                                enabled = selectedSnapshots.isNotEmpty(),
+                                onDismiss = dismiss,
+                                onClick = { saveSelected(selectedSnapshots, toAlbum = false) },
+                            )
+                            GkBatchActionMenuItem(
+                                text = UiStrings.action_save_to_album,
+                                enabled = selectedSnapshots.isNotEmpty(),
+                                onDismiss = dismiss,
+                                onClick = { saveSelected(selectedSnapshots, toAlbum = true) },
+                            )
+                            if (hasUnlinkedSnapshots) {
+                                GkBatchActionMenuItem(
+                                    text = UiStrings.snapshot_generate_link,
+                                    enabled = pendingUploads.isNotEmpty(),
+                                    onDismiss = dismiss,
+                                    onClick = {
+                                        val targets = pendingUploads
+                                        actionScope.launchUi {
+                                            if (!mainVm.dialogRequests.confirm(
+                                                    title = UiStrings.snapshot_generate_link,
+                                                    text = UiStrings.snapshot_generate_links_confirmation(targets.size) +
+                                                        "\n\n" + UiStrings.snapshot_upload_privacy_warning,
+                                                    confirmText = UiStrings.snapshot_generate_link,
+                                                )) return@launchUi
+                                            if (mainVm.githubUpload.startBatchTask(createUploadItems(targets))) {
+                                                selectionState.clear()
+                                            } else {
+                                                toast(UiStrings.upload_busy)
+                                            }
+                                        }
+                                    },
+                                )
+                            }
+                            GkBatchActionMenuItem(
+                                text = UiStrings.link_copy,
+                                enabled = selectedSnapshots.isNotEmpty(),
+                                onDismiss = dismiss,
+                                onClick = {
+                                    val targets = selectedSnapshots
+                                    val targetIds = targets.map { it.id }
+                                    val pending = targets.filter { it.githubAssetId == null }
+                                    if (pending.isEmpty()) {
+                                        showLinks(targets)
+                                    } else {
+                                        actionScope.launchUi {
+                                            val upload = mainVm.dialogRequests.confirm(
+                                                title = UiStrings.link_copy,
+                                                text = (if (pending.size == targets.size) {
+                                                    UiStrings.snapshot_copy_links_upload_all_confirmation(targets.size)
+                                                } else {
+                                                    UiStrings.snapshot_copy_links_upload_some_confirmation(pending.size)
+                                                }) + "\n\n" + UiStrings.snapshot_upload_privacy_warning,
+                                                confirmText = UiStrings.snapshot_generate_link,
+                                            )
+                                            if (upload) {
+                                                if (mainVm.githubUpload.startBatchTask(
+                                                        createUploadItems(pending),
+                                                        onFinished = { showCurrentLinks(targetIds) },
+                                                    )) {
+                                                    selectionState.clear()
+                                                } else {
+                                                    toast(UiStrings.upload_busy)
+                                                }
+                                            } else if (pending.size < targets.size) {
+                                                showLinks(targets)
+                                            }
+                                        }
+                                    }
+                                },
+                            )
+                            GkBatchActionMenuItem(
+                                text = UiStrings.action_delete,
+                                destructive = true,
+                                enabled = selectedSnapshots.isNotEmpty(),
+                                onDismiss = dismiss,
+                                onClick = {
+                                    val targets = selectedSnapshots
+                                    actionScope.launchUi {
+                                        if (!mainVm.dialogRequests.confirm(
+                                            title = UiStrings.snapshot_delete,
+                                            text = UiStrings.snapshot_delete_selected_confirmation(targets.size),
+                                            error = true,
+                                        )) return@launchUi
+                                        val result = vm.deleteSnapshots(targets)
+                                        selectionState.removeDeleted(result.deletedIds)
+                                        toast(UiStrings.snapshot_delete_selected_result(
+                                            result.deletedIds.size,
+                                            result.failedCount,
+                                        ))
+                                    }
+                                },
+                            )
+                        }
+                    } else {
+                        val nextMode = when (displayMode) {
+                            SnapshotDisplayModeOption.ByTime -> SnapshotDisplayModeOption.ByApp
+                            SnapshotDisplayModeOption.ByApp -> SnapshotDisplayModeOption.ByTime
+                        }
+                        GkIconButton(
+                            imageVector = when (displayMode) {
+                                SnapshotDisplayModeOption.ByTime -> GkIcons.CalendarMonth
+                                SnapshotDisplayModeOption.ByApp -> GkIcons.Apps
+                            },
+                            modifier = Modifier.semantics { stateDescription = displayMode.label },
+                            contentDescription = when (nextMode) {
+                                SnapshotDisplayModeOption.ByTime -> UiStrings.snapshot_view_switch_to_time
+                                SnapshotDisplayModeOption.ByApp -> UiStrings.snapshot_view_switch_to_app
+                            },
+                            onClick = {
+                                AppStore.updateSettings {
+                                    it.copy(snapshotDisplayMode = nextMode.value)
+                                }
+                                resetScroll()
+                            },
+                        )
+                    }
+                },
+            )
+        },
+    ) { contentPadding ->
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 160.dp),
+            modifier = Modifier.fillMaxSize().padding(contentPadding),
+            state = gridState,
+            contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 12.dp),
+            // Two 160dp thumbnails still fit at 360dp with the shared 16dp page gutters.
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (firstLoading && groups.isEmpty()) {
+                item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+            }
+            groups.forEach { group ->
+                stickyHeader(key = group.key) {
+                    val groupIds = remember(group) {
+                        group.snapshots.mapTo(mutableSetOf()) { it.id }
+                    }
+                    val selectedCount = groupIds.count { it in selectedIds }
+                    val groupSelectionState = when (selectedCount) {
+                        0 -> ToggleableState.Off
+                        groupIds.size -> ToggleableState.On
+                        else -> ToggleableState.Indeterminate
+                    }
+                    SnapshotGroupHeader(
+                        title = group.title,
+                        appId = group.appId,
+                        selectedMode = selectionState.active,
+                        groupSelectionState = groupSelectionState,
+                        onToggleSelection = {
+                            if (groupSelectionState == ToggleableState.On) {
+                                selectionState.deselectMany(groupIds)
+                            } else {
+                                selectionState.selectMany(groupIds)
+                            }
+                        },
+                    )
+                }
+                items(group.snapshots, key = { it.id }) { snapshot ->
+                    SnapshotCard(
+                        snapshot = snapshot,
+                        appName = appNames[snapshot.appId] ?: snapshot.appId,
+                        showAppName = displayMode != SnapshotDisplayModeOption.ByApp,
+                        thumbnailVersion = thumbnailVersions[snapshot.id] ?: 0,
+                        selectedMode = selectionState.active,
+                        selected = snapshot.id in selectedIds,
+                        onClick = {
+                            if (selectionState.active) {
+                                selectionState.toggle(snapshot.id)
+                            } else {
+                                openPreview(snapshot.id)
+                            }
+                        },
+                        onLongClick = { selectionState.select(snapshot.id) },
+                        onMore = { actionRequest = SheetRequest(snapshot.id) },
+                    )
+                }
+            }
+            if (!firstLoading) {
+                item(key = ListPlaceholder.KEY, span = { GridItemSpan(maxLineSpan) }) {
+                    Column {
+                        if (groups.isEmpty()) {
+                            GkEmptyState(
+                                text = when {
+                                    loadError != null -> loadError.message ?: UiStrings.data_load_failed
+                                    else -> UiStrings.data_empty
+                                },
+                            )
+                        }
+                        GkPageBottomSpace()
+                    }
+                }
+            }
+        }
+    }
+
+    GkRetainedSheet(
+        request = actionRequest,
+        snapshot = actionSnapshot,
+        missing = actionRequest != null && actionSnapshot == null && loadableState is Loadable.Ready,
+        onDismissRequest = { request ->
+            if (actionRequest === request) actionRequest = null
+        },
+    ) { _, snapshot, show, dismiss, onDismissFinished ->
+        val actions = SnapshotActionHandler(
+            mainVm = mainVm,
+            vm = vm,
+            activity = context,
+            onReplaced = { id ->
+                thumbnailVersions[id] = (thumbnailVersions[id] ?: 0) + 1
+            },
+        )
+        GkSnapshotActionsSheet(
+            snapshot = snapshot,
+            appName = appNames[snapshot.appId] ?: snapshot.appId,
+            show = show,
+            onDismissFinished = onDismissFinished,
+            onDismissRequest = dismiss,
+            onShare = { actions.share(snapshot) },
+            onSaveToDownloads = { actions.saveToDownloads(snapshot) },
+            onUpload = { actions.upload(snapshot) },
+            onSaveToAlbum = { actions.saveToAlbum(snapshot) },
+            onReplace = { actions.replace(snapshot) },
+            onDelete = { actions.delete(snapshot) },
+            onViewNodes = {
+                mainVm.navigatePage(
+                    SnapshotNodesRoute(
+                        snapshotId = snapshot.id,
+                        screenWidth = snapshot.screenWidth,
+                        screenHeight = snapshot.screenHeight,
+                    ),
+                )
+            },
+        )
+    }
+}
+
+@Composable
+private fun SnapshotGroupHeader(
+    title: String,
+    appId: String?,
+    selectedMode: Boolean,
+    groupSelectionState: ToggleableState,
+    onToggleSelection: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().background(MiuixTheme.colorScheme.surface).semantics { heading() },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (appId != null) {
+            GkAppNameText(
+                appId = appId,
+                fallbackName = title,
+                modifier = Modifier.weight(1f),
+                style = MiuixTheme.textStyles.footnote1,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+        } else {
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                style = MiuixTheme.textStyles.footnote1,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Box(modifier = Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.Center) {
+            if (selectedMode) {
+                Checkbox(
+                    state = groupSelectionState,
+                    onClick = onToggleSelection,
+                    modifier = Modifier.semantics {
+                        contentDescription = title
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SnapshotCard(
+    snapshot: Snapshot,
+    appName: String,
+    showAppName: Boolean,
+    thumbnailVersion: Int,
+    selectedMode: Boolean,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onMore: () -> Unit,
+) {
+    val context = LocalContext.current
+    val colorScheme = MiuixTheme.colorScheme
+    val cardShape = GkShapes.card
+    val cardBackground = colorScheme.surfaceContainer
+    val screenshotFile = snapshot.screenshotFile
+    val modifiedAt = screenshotFile.lastModified()
+    val cacheKey = remember(snapshot.id, modifiedAt, thumbnailVersion) {
+        "snapshot-" + snapshot.id + "-" + modifiedAt + "-" + thumbnailVersion
+    }
+    val request = remember(context, screenshotFile, cacheKey) {
+        ImageRequest.Builder(context)
+            .data(screenshotFile)
+            .memoryCacheKey(cacheKey)
+            .diskCachePolicy(CachePolicy.DISABLED)
+            .build()
+    }
+    var imageFailed by remember(cacheKey) { mutableStateOf(!screenshotFile.isFile) }
+    Card(
+        modifier = Modifier.fillMaxWidth().clip(cardShape)
+            .then(
+                if (selected) Modifier.border(2.dp, colorScheme.primary, cardShape) else Modifier
+            )
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+                onClickLabel = if (selectedMode) UiStrings.selection_toggle else UiStrings.action_view,
+                onLongClickLabel = UiStrings.selection_mode_enter,
+            )
+            .semantics {
+                if (selectedMode) {
+                    role = Role.Checkbox
+                    this.selected = selected
+                    toggleableState = if (selected) ToggleableState.On else ToggleableState.Off
+                }
+            },
+        colors = CardDefaults.defaultColors(
+            // The border and checkmark show selection; keep small metadata on a neutral surface.
+            color = cardBackground,
+            contentColor = readableTextColor(cardBackground, colorScheme.onSurfaceContainer),
+        ),
+    ) {
+        Box(
+            modifier = Modifier.fillMaxWidth().aspectRatio(4f / 3f)
+                .background(colorScheme.surfaceVariant),
+        ) {
+            AsyncImage(
+                model = request,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                onSuccess = { imageFailed = false },
+                onError = { imageFailed = true },
+            )
+            Box(
+                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(56.dp)
+                    .background(Brush.verticalGradient(
+                        colors = listOf(Color.Black.copy(alpha = 0.3f), Color.Transparent),
+                    )),
+            )
+            if (imageFailed) {
+                Text(
+                    text = UiStrings.snapshot_screenshot_unavailable,
+                    modifier = Modifier.align(Alignment.Center).padding(12.dp),
+                    style = MiuixTheme.textStyles.footnote1,
+                )
+            }
+            Row(
+                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(56.dp)
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier.width(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (selectedMode) {
+                        Checkbox(
+                            state = if (selected) ToggleableState.On else ToggleableState.Off,
+                            onClick = null,
+                            modifier = Modifier.clearAndSetSemantics {},
+                            colors = CheckboxDefaults.checkboxColors(uncheckedBackgroundColor = Color.White.copy(alpha = 0.8f)),
+                        )
+                    } else {
+                        GkIconButton(
+                            imageVector = GkIcons.MoreVert,
+                            contentDescription = UiStrings.more_label,
+                            colors = GkIconButtonDefaults.iconButtonColors(
+                                containerColor = Color.Black.copy(alpha = 0.6f),
+                                contentColor = Color.White,
+                            ),
+                            onClick = onMore,
+                        )
+                    }
+                }
+            }
+        }
+        val fullTime = remember(snapshot.id) { snapshot.id.format("yyyy-MM-dd HH:mm:ss") }
+        // MIUIX 部分 TextStyle 的 lineHeight 不是 Sp，直接 toDp() 会抛
+        // IllegalStateException: Only Sp can convert to Px
+        val firstLineHeight = MiuixTheme.textStyles.body2.lineHeightDp(LocalDensity.current)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp)
+                .heightIn(min = firstLineHeight),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (showAppName) {
+                GkAppNameText(
+                    appId = snapshot.appId,
+                    fallbackName = appName,
+                    modifier = Modifier.weight(1f),
+                    style = MiuixTheme.textStyles.body2,
+                )
+                val timeTooltipState = rememberTooltipState()
+                val timeTooltipScope = rememberCoroutineScope()
+                GkTooltipBox(
+                    text = fullTime,
+                    state = timeTooltipState,
+                    positioning = TooltipAnchorPosition.Above,
+                    enableUserInput = false,
+                ) {
+                    GkFixedTimeText(
+                        text = snapshot.id.format("HH:mm"),
+                        modifier = (if (selectedMode) Modifier else Modifier.clickable {
+                            timeTooltipScope.launch { timeTooltipState.show() }
+                        }).semantics { contentDescription = fullTime },
+                        style = MiuixTheme.textStyles.footnote2,
+                    )
+                }
+            } else {
+                GkFixedTimeText(
+                    text = snapshot.date,
+                    modifier = Modifier.semantics { contentDescription = fullTime },
+                    style = MiuixTheme.textStyles.footnote2,
+                )
+            }
+        }
+        val activityLabel = getShowActivityId(snapshot.appId, snapshot.activityId)
+            ?.takeIf(String::isNotBlank)
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp)
+                .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = activityLabel ?: UiStrings.value_null,
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 1,
+                overflow = TextOverflow.MiddleEllipsis,
+                style = MiuixTheme.textStyles.footnote2,
+                color = if (activityLabel == null) {
+                    readableTextColor(cardBackground, colorScheme.onSurfaceVariantSummary)
+                } else {
+                    Color.Unspecified
+                },
+            )
+        }
+    }
+}

@@ -1,0 +1,90 @@
+package li.gkd.app.ui.component
+
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.theme.LocalContentColor
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.takeOrElse
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
+import li.gkd.app.ui.icon.SportsBasketball
+import li.gkd.app.ui.style.placeholderHeight
+import li.gkd.app.ui.style.placeholderWidth
+
+@Composable
+fun GroupNameText(
+    modifier: Modifier = Modifier,
+    preText: String? = null,
+    isGlobal: Boolean,
+    text: String,
+    color: Color = Color.Unspecified,
+    style: TextStyle = MiuixTheme.textStyles.main,
+    overflow: TextOverflow = TextOverflow.Clip,
+    softWrap: Boolean = true,
+    maxLines: Int = Int.MAX_VALUE,
+) {
+    if (isGlobal) {
+        val text = remember(preText, text) {
+            buildAnnotatedString {
+                if (preText != null) {
+                    append(preText)
+                }
+                appendInlineContent("icon")
+                append(text)
+            }
+        }
+        val textColor = color.takeOrElse { style.color.takeOrElse { LocalContentColor.current } }
+        val placeholderWidth = style.placeholderWidth()
+        val placeholderHeight = style.placeholderHeight()
+        val inlineContent = remember(style, textColor, placeholderWidth, placeholderHeight) {
+            mapOf(
+                "icon" to InlineTextContent(
+                    placeholder = Placeholder(
+                        width = placeholderWidth,
+                        height = placeholderHeight,
+                        placeholderVerticalAlign = PlaceholderVerticalAlign.Center
+                    )
+                ) {
+                    PerfIcon(
+                        imageVector = SportsBasketball,
+                        modifier = Modifier.fillMaxSize(),
+                        tint = textColor
+                    )
+                }
+            )
+        }
+        Text(
+            modifier = modifier,
+            text = text,
+            inlineContent = inlineContent,
+            style = style,
+            color = color,
+            overflow = overflow,
+            softWrap = softWrap,
+            maxLines = maxLines,
+        )
+    } else {
+        Text(
+            modifier = modifier,
+            text = if (preText.isNullOrEmpty()) {
+                text
+            } else {
+                preText + text
+            },
+            style = style,
+            color = color,
+            overflow = overflow,
+            softWrap = softWrap,
+            maxLines = maxLines,
+        )
+    }
+}

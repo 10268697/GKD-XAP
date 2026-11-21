@@ -1,0 +1,118 @@
+package li.gkd.app.ui.component
+
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
+import top.yukonga.miuix.kmp.theme.LocalContentColor
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.basic.Text
+import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.takeOrElse
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import li.gkd.app.text.UiStrings
+import li.gkd.app.data.AppInfo
+import li.gkd.app.priv.currentUserId
+import li.gkd.app.data.appinfo.AppInfoRepository
+import li.gkd.app.ui.style.GkShapes
+import li.gkd.app.ui.style.placeholderHeight
+import li.gkd.app.ui.style.placeholderWidth
+
+@Composable
+fun GkAppNameText(
+    modifier: Modifier = Modifier,
+    appId: String,
+    appInfo: AppInfo? = null,
+    fallbackName: String? = null,
+    style: TextStyle = MiuixTheme.textStyles.main,
+    color: Color = Color.Unspecified,
+) {
+    val info = appInfo ?: AppInfoRepository.appInfoMapFlow.collectAsStateWithLifecycle().value[appId]
+    val showSystemIcon = info?.isSystem == true
+    val appName = info?.name ?: fallbackName ?: appId
+    val userName = info?.userId?.let { userId ->
+        if (userId == currentUserId) {
+            null
+        } else {
+            val userInfo = AppInfoRepository.otherUserMapFlow.collectAsStateWithLifecycle().value[userId]
+            UiStrings.app_profile_name(userInfo?.name ?: userId)
+        }
+    }
+    if (!showSystemIcon && userName == null) {
+        Text(
+            modifier = modifier,
+            text = appName,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            style = style,
+            color = color,
+        )
+    } else {
+        val userNameColor = MiuixTheme.colorScheme.onSurfaceVariantSummary
+        val annotatedString = remember(showSystemIcon, appName, userName, userNameColor) {
+            buildAnnotatedString {
+                if (showSystemIcon) {
+                    appendInlineContent("icon")
+                }
+                append(appName)
+                if (userName != null) {
+                    append(" ")
+                    withStyle(
+                        style = SpanStyle(
+                            fontWeight = FontWeight.Bold,
+                            color = userNameColor,
+                        )
+                    ) {
+                        append(userName)
+                    }
+                }
+            }
+        }
+        val inlineContent = if (showSystemIcon) {
+            val contentColor = color.takeOrElse { style.color.takeOrElse { LocalContentColor.current } }
+            remember(style, contentColor) {
+                mapOf(
+                    "icon" to InlineTextContent(
+                        placeholder = Placeholder(
+                            width = style.placeholderWidth(),
+                            height = style.placeholderHeight(),
+                            placeholderVerticalAlign = PlaceholderVerticalAlign.Center
+                        )
+                    ) {
+                        GkIcon(
+                            imageVector = GkIcons.VerifiedUser,
+                            modifier = Modifier
+                                .clip(GkShapes.compact)
+                                .fillMaxSize(),
+                            tint = contentColor
+                        )
+                    }
+                )
+            }
+        } else {
+            emptyMap()
+        }
+        Text(
+            modifier = modifier,
+            text = annotatedString,
+            inlineContent = inlineContent,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            style = style,
+            color = color,
+        )
+    }
+}

@@ -1,0 +1,367 @@
+package li.gkd.app
+
+import android.app.Activity
+import android.app.AlertDialog
+import android.app.ActivityManager
+import android.app.AppOpsManager
+import android.app.Application
+import android.app.KeyguardManager
+import android.content.ClipboardManager
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.LauncherApps
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
+import android.database.ContentObserver
+import android.hardware.display.DisplayManager
+import android.hardware.input.InputManager
+import android.media.projection.MediaProjectionManager
+import android.net.Uri
+import android.os.Bundle
+import android.os.SystemClock
+import android.os.PowerManager
+import android.os.Process.killProcess
+import android.os.Process.myPid
+import android.provider.Settings
+import android.util.Log
+import android.view.Display
+import android.view.WindowManager
+import android.view.accessibility.AccessibilityManager
+import android.view.inputmethod.InputMethodManager
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import li.gkd.app.a11y.initA11yFeat
+import li.gkd.app.data.CrashData
+import li.gkd.app.data.subscription.SubscriptionRepository
+import li.gkd.app.data.appinfo.AppInfoRepository
+import li.gkd.app.data.selfAppInfo
+import li.gkd.app.notif.NotificationChannels
+import li.gkd.app.platform.lifecycle.MainActivityVisibility
+import li.gkd.app.platform.lifecycle.RuntimeStateSynchronizer
+import li.gkd.app.platform.overlay.KeepAliveOverlayCoordinator
+import li.gkd.app.priv.PrivilegeOwnerLifecycle
+import li.gkd.app.priv.CrashRecovery
+import li.gkd.app.priv.CrashHandlerGate
+import li.gkd.app.priv.initPrivilege
+import li.gkd.app.priv.requestPrivilegeRecovery
+import li.gkd.app.service.ExposeService
+import li.gkd.app.service.clearHttpSubs
+import li.gkd.app.service.initA11yWhiteAppList
+import li.gkd.app.store.AppStore
+import li.gkd.app.util.AndroidTarget
+import li.gkd.app.util.REPOSITORY_URL
+import li.gkd.app.util.LogUtils
+import li.gkd.app.util.FolderUtils
+import li.gkd.app.util.deviceInfoDesc
+import li.gkd.app.util.ToastUtils.initToast
+import li.gkd.app.util.launchLogged
+import li.gkd.app.util.ToastUtils.toast
+import li.gkd.db.Db
+import li.gkd.db.initialize
+import org.lsposed.hiddenapibypass.HiddenApiBypass
+
+
+val appScope by lazy { MainScope() }
+
+/** Services and UI may await this without touching settings or migrated paths first. */
+val appRuntimeReady = CompletableDeferred<Unit>()
+private val startupFailure = MutableStateFlow<Throwable?>(null)
+val appStartupFailure: StateFlow<Throwable?> = startupFailure
+fun retryAppStartup() = app.beginStartup()
+
+private lateinit var innerApp: App
+val app: App
+    get() = innerApp
+
+private val applicationInfo by lazy {
+    app.packageManager.getApplicationInfo(
+        app.packageName,
+        PackageManager.GET_META_DATA
+    )
+}
+
+private fun getMetaString(key: String): String {
+    return applicationInfo.metaData.getString(key) ?: error("Missing meta-data: $key")
+}
+
+// https://github.com/android-cs/16/blob/main/packages/SettingsLib/src/com/android/settingslib/accessibility/AccessibilityUtils.java#L41
+private const val ENABLED_ACCESSIBILITY_SERVICES_SEPARATOR = ':'
+
+@Serializable
+data class AppMeta(
+    val channel: String = getMetaString("channel"),
+    val buildKey: String = getMetaString("buildKey"),
+    val commitId: String = getMetaString("commitId"),
+    val commitTime: Long = getMetaString("commitTime").toLong(),
+    val tagName: String? = getMetaString("tagName").takeIf { it.isNotEmpty() },
+    val debuggable: Boolean = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0,
+    val versionCode: Int = selfAppInfo.versionCode,
+    val versionName: String = selfAppInfo.versionName!!,
+    val appId: String = app.packageName!!,
+    val appName: String = app.getString(R.string.app_name)
+) {
+    // REPOSITORY_URL 结尾没有斜杠，原来那种「base + "tree/…"」的拼法会直接粘成 GKD-XAtree/…
+    val commitUrl = if (tagName != null) "$REPOSITORY_URL/tree/$tagName" else "$REPOSITORY_URL/commit/$commitId"
+    val isGkdChannel get() = channel == "gkd"
+    val updateEnabled get() = isGkdChannel
+    val isBeta get() = versionName.contains("beta")
+}
+
+val META by lazy { AppMeta() }
+
+fun contentObserver(listener: () -> Unit) = object : ContentObserver(null) {
+    override fun onChange(selfChange: Boolean) = listener()
+}
+
+class App : Application() {
+    companion object {
+        const val START_WAIT_TIME = 3000L
+    }
+
+    init {
+        innerApp = this
+    }
+
+    override fun attachBaseContext(base: Context?) {
+        super.attachBaseContext(base)
+        installCrashHandler()
+        CrashRecovery.initialize()
+        if (AndroidTarget.P) {
+            HiddenApiBypass.addHiddenApiExemptions("L")
+        }
+    }
+
+    fun registerObserver(
+        uri: Uri,
+        observer: ContentObserver
+    ) {
+        contentResolver.registerContentObserver(uri, false, observer)
+    }
+
+    fun unregisterObserver(observer: ContentObserver) {
+        contentResolver.unregisterContentObserver(observer)
+    }
+
+    fun getSecureString(name: String): String? = Settings.Secure.getString(contentResolver, name)
+    fun putSecureString(name: String, value: String?): Boolean {
+        return Settings.Secure.putString(contentResolver, name, value)
+    }
+
+    fun putSecureInt(name: String, value: Int): Boolean {
+        return Settings.Secure.putInt(contentResolver, name, value)
+    }
+
+    fun getSecureA11yServices(): MutableSet<ComponentName> {
+        val value = getSecureString(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        if (value.isNullOrEmpty()) return mutableSetOf()
+        return value.split(
+            ENABLED_ACCESSIBILITY_SERVICES_SEPARATOR
+        ).mapNotNull { ComponentName.unflattenFromString(it) }.toHashSet()
+    }
+
+    fun putSecureA11yServices(services: Set<ComponentName>) {
+        putSecureString(
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+            services.joinToString(ENABLED_ACCESSIBILITY_SERVICES_SEPARATOR.toString()) { it.flattenToShortString() }
+        )
+    }
+
+    fun resolveAppId(intent: Intent): String? {
+        return intent.resolveActivity(packageManager)?.packageName
+    }
+
+    fun getPkgInfo(appId: String): PackageInfo? = try {
+        packageManager.getPackageInfo(appId, AppInfoRepository.packageFlags)
+    } catch (_: PackageManager.NameNotFoundException) {
+        null
+    }
+
+    fun resolveAppId(action: String, category: String? = null): String? {
+        val intent = Intent(action)
+        if (category != null) {
+            intent.addCategory(category)
+        }
+        return resolveAppId(intent)
+    }
+
+    fun startLaunchActivity() {
+        val intent = packageManager.getLaunchIntentForPackage(META.appId)!!
+        intent.addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK
+                    or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        )
+        startActivity(intent)
+    }
+
+    fun checkGrantedPermission(permission: String) = ContextCompat.checkSelfPermission(
+        this,
+        permission,
+    ) == PackageManager.PERMISSION_GRANTED
+
+    val startTime = SystemClock.elapsedRealtime()
+    var justStarted: Boolean = true
+        get() {
+            if (field) {
+                field = SystemClock.elapsedRealtime() - startTime < START_WAIT_TIME
+            }
+            return field
+        }
+
+    val activityManager by lazy { app.getSystemService(ACTIVITY_SERVICE) as ActivityManager }
+    val appOpsManager by lazy { app.getSystemService(APP_OPS_SERVICE) as AppOpsManager }
+    val inputMethodManager by lazy { app.getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager }
+    val inputManager by lazy { app.getSystemService(INPUT_SERVICE) as InputManager }
+    val mediaProjectionManager by lazy { getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager }
+    val windowManager by lazy { app.getSystemService(WINDOW_SERVICE) as WindowManager }
+    val displayManager by lazy { app.getSystemService(DISPLAY_SERVICE) as DisplayManager }
+    val keyguardManager by lazy { app.getSystemService(KEYGUARD_SERVICE) as KeyguardManager }
+    val clipboardManager by lazy { app.getSystemService(CLIPBOARD_SERVICE) as ClipboardManager }
+    val powerManager by lazy { getSystemService(POWER_SERVICE) as PowerManager }
+    val a11yManager by lazy { getSystemService(ACCESSIBILITY_SERVICE) as AccessibilityManager }
+    val launcherApps by lazy { getSystemService(LAUNCHER_APPS_SERVICE) as LauncherApps }
+
+    val compatDisplay: Display
+        get() = if (AndroidTarget.R) {
+            displayManager.getDisplay(Display.DEFAULT_DISPLAY)
+        } else {
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay
+        }
+
+    private var startupJob: Job? = null
+    private val crashHandler = CrashHandlerGate()
+
+    override fun onCreate() {
+        super.onCreate()
+        registerRecoveryPrompt()
+        beginStartup()
+    }
+
+    @Synchronized
+    internal fun beginStartup() {
+        if (appRuntimeReady.isCompleted || startupJob?.isActive == true) return
+        startupFailure.value = null
+        startupJob = appScope.launch(Dispatchers.IO) {
+            try {
+                FolderUtils.initializeStorage()
+                Db.initialize(this@App, FolderUtils.dbFolder.resolve("gkd.db").absolutePath)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                CrashRecovery.saveEmergencyEvidence(Thread.currentThread(), error)
+                startupFailure.value = error
+                return@launch
+            }
+            // Only migration/database preparation is retried in-process. Runtime registration
+            // starts once; an unexpected failure here goes through the crash fuse instead of
+            // registering observers/receivers twice on a retry.
+            withContext(Dispatchers.Main) {
+                initializeRuntimeComponents()
+                appRuntimeReady.complete(Unit)
+            }
+            LogUtils.d("Application runtime initialized")
+        }
+    }
+
+    private fun installCrashHandler() {
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            crashHandler.handle(
+                writeCrash = {
+                    CrashRecovery.recordCrash(thread, error)
+                    runCatching {
+                        if (FolderUtils.isStorageReady) {
+                            val now = System.currentTimeMillis()
+                            CrashData(
+                                id = now,
+                                mtime = now,
+                                device = deviceInfoDesc,
+                                androidVersionCode = android.os.Build.VERSION.SDK_INT,
+                                androidVersionName = android.os.Build.VERSION.RELEASE,
+                                versionCode = META.versionCode,
+                                versionName = META.versionName,
+                                name = error::class.java.name,
+                                message = error.message,
+                                thread = thread.name,
+                                stackTrace = Log.getStackTraceString(error),
+                            ).save()
+                            LogUtils.d("UncaughtExceptionHandler", thread, error)
+                            if (!LogUtils.flush(1_000L)) Log.e("GkdCrash", "Crash log flush timed out")
+                        }
+                    }.onFailure { Log.e("GkdCrash", "Unable to save structured crash", it) }
+                    if (!CrashRecovery.isRecoveryBlocked && MainActivityVisibility.isVisible && appRuntimeReady.isCompleted) {
+                        runCatching {
+                            PrivilegeOwnerLifecycle.prepareAppRestart(passiveTimeoutMillis = 1_000L)
+                            startLaunchActivity()
+                        }.onFailure { Log.e("GkdCrash", "Unable to request app restart", it) }
+                    }
+                },
+                terminate = { killProcess(myPid()) },
+            )
+        }
+    }
+
+    private fun registerRecoveryPrompt() {
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            private var prompted = false
+            override fun onActivityResumed(activity: Activity) {
+                if (activity !is MainActivity || prompted || !CrashRecovery.isRecoveryBlocked) return
+                prompted = true
+                AlertDialog.Builder(activity)
+                    .setTitle("自动恢复已暂停")
+                    .setMessage("应用短时间内连续崩溃，已暂停自动重启和特权重连。可以先检查配置或导出日志，再手动恢复。")
+                    .setNegativeButton("保持暂停", null)
+                    .setPositiveButton("恢复自动运行") { _, _ ->
+                        appScope.launch(Dispatchers.IO) {
+                            try {
+                                appRuntimeReady.await()
+                                CrashRecovery.resumeAutomaticRecovery()
+                            } catch (error: Exception) {
+                                CrashRecovery.saveEmergencyEvidence(Thread.currentThread(), error)
+                                toast("恢复失败：" + (error.message ?: "未知错误"))
+                            }
+                        }
+                    }
+                    .show()
+            }
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+            override fun onActivityStarted(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) { if (activity is MainActivity) prompted = false }
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
+    }
+
+    private fun initializeRuntimeComponents() {
+        initToast()
+        AppStore.initialize()
+        // 保活窗口由应用级协调器持有，不再绑在常驻通知服务的生命周期上
+        KeepAliveOverlayCoordinator.initialize()
+        appScope.launchLogged(Dispatchers.IO) {
+            ExposeService.initCommandFile()
+        }
+        NotificationChannels.initialize()
+        AppInfoRepository.initialize()
+        initA11yFeat()
+        initPrivilege()
+        requestPrivilegeRecovery()
+        appScope.launchLogged(Dispatchers.IO) {
+            SubscriptionRepository.initialize()
+        }
+        initA11yWhiteAppList()
+        clearHttpSubs()
+        RuntimeStateSynchronizer.requestSync()
+    }
+}

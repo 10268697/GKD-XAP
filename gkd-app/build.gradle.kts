@@ -1,0 +1,327 @@
+import com.android.build.api.artifact.SingleArtifact
+import com.android.build.api.variant.ApplicationAndroidComponentsExtension
+import com.android.build.api.variant.ApplicationVariant
+import com.android.build.api.variant.impl.VariantOutputImpl
+import li.gkd.gradle.BuildAssetAdapter
+import li.gkd.gradle.BuildAssetVariant
+import li.gkd.gradle.GenerateSourcePathsTask
+import li.gkd.gradle.GenerateUiStringsTask
+import li.gkd.gradle.buildProperty
+import li.gkd.gradle.configureBuildAssets
+import li.gkd.gradle.gitInfo
+import li.gkd.gradle.readDebugSuffixResources
+import li.gkd.gradle.releaseBuildKey
+
+val gitInfo = project.gitInfo
+val debugSuffixResources = project.readDebugSuffixResources()
+
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.parcelize)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.remap)
+    alias(libs.plugins.codeorigin)
+}
+
+android {
+    namespace = "li.gkd.app"
+    defaultConfig {
+        applicationId = "li.songe.gkdx"
+        versionCode = 155
+        versionName = "1.5.4"
+
+        vectorDrawables {
+            useSupportLibrary = true
+        }
+        androidResources {
+            localeFilters += listOf("zh-rCN", "en")
+        }
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+
+        manifestPlaceholders["buildKey"] = ""
+        manifestPlaceholders["commitId"] = gitInfo.commitId
+        manifestPlaceholders["commitTime"] = gitInfo.commitTime
+        manifestPlaceholders["tagName"] = gitInfo.tagName.orEmpty()
+    }
+
+    buildFeatures {
+        compose = true
+        aidl = true
+        resValues = true
+    }
+
+    // Compose 的 Recomposer 会调 android.os.Trace，Android 单测默认的 mockable jar 会抛
+    // "Method beginSection in android.os.Trace not mocked"；组合级单测需要它返回默认值。
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
+    }
+
+
+    val gkdStoreFile = buildProperty("GKD_STORE_FILE").orNull
+    val gkdSigningConfig = if (gkdStoreFile != null) {
+        signingConfigs.create("gkd") {
+            storeFile = file(gkdStoreFile)
+            storePassword = buildProperty("GKD_STORE_PASSWORD").orNull
+            keyAlias = buildProperty("GKD_KEY_ALIAS").orNull
+            keyPassword = buildProperty("GKD_KEY_PASSWORD").orNull
+        }
+    } else {
+        signingConfigs.getByName("debug")
+    }
+
+    val playStoreFile = buildProperty("PLAY_STORE_FILE").orNull
+    val playSigningConfig = if (playStoreFile != null) {
+        signingConfigs.create("play") {
+            storeFile = file(playStoreFile)
+            storePassword = buildProperty("PLAY_STORE_PASSWORD").orNull
+            keyAlias = buildProperty("PLAY_KEY_ALIAS").orNull
+            keyPassword = buildProperty("PLAY_KEY_PASSWORD").orNull
+        }
+    } else {
+        gkdSigningConfig
+    }
+
+    buildTypes {
+        all {
+            vcsInfo.include = false
+            versionNameSuffix = gitInfo.versionNameSuffix
+        }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            isDebuggable = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+        }
+        // perf：把 release 的 R8 优化 + debug 的可直接安装签名结合起来，
+        // 用于「想测性能但不想签 release 包」的场景。非 debuggable，不能用断点。
+        create("perf") {
+            initWith(getByName("debug"))
+            isMinifyEnabled = true
+            isShrinkResources = true
+            isDebuggable = false
+            signingConfig = gkdSigningConfig
+            matchingFallbacks += listOf("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            resValue("color", "better_black", "#FF5D92")
+        }
+        debug {
+            signingConfig = gkdSigningConfig
+            applicationIdSuffix = ".debug"
+            resValue("color", "better_black", "#FF5D92")
+            for ((name, value) in debugSuffixResources) {
+                resValue("string", name, value)
+            }
+        }
+    }
+    productFlavors {
+        flavorDimensions += "channel"
+        create("gkd") {
+            isDefault = true
+            signingConfig = gkdSigningConfig
+            resValue("bool", "is_accessibility_tool", "true")
+        }
+        create("play") {
+            signingConfig = playSigningConfig
+            resValue("bool", "is_accessibility_tool", "false")
+        }
+        all {
+            dimension = flavorDimensions.first()
+            manifestPlaceholders["channel"] = name
+        }
+    }
+    // https://github.com/LSPosed/AndroidHiddenApiBypass
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+    // https://priv-kit.pages.dev/zh/guide/getting-started#native-library-packaging
+    packaging.jniLibs.useLegacyPackaging = true
+    packaging.resources.excludes += setOf(
+        "META-INF/**",
+        "DebugProbesKt.bin",
+    )
+}
+
+val generateUiStrings = tasks.register<GenerateUiStringsTask>("generateUiStrings") {
+    stringsFile.set(layout.projectDirectory.file("src/main/res/values/strings.xml"))
+    outputDirectory.set(layout.buildDirectory.dir("generated/source/uiStrings"))
+}
+androidComponents.onVariants { variant ->
+    variant.sources.java?.addGeneratedSourceDirectory(generateUiStrings, GenerateUiStringsTask::outputDirectory)
+}
+
+val androidBuildAssetAdapter =
+    BuildAssetAdapter<ApplicationAndroidComponentsExtension, ApplicationVariant>(
+        onVariants = { components, buildType, action ->
+            val selector = if (buildType == null) {
+                components.selector().all()
+            } else {
+                components.selector().withBuildType(buildType)
+            }
+            components.onVariants(selector, action)
+        },
+        addGeneratedSourceDirectory = { variant, task ->
+            variant.sources.assets?.addGeneratedSourceDirectory(
+                task,
+                GenerateSourcePathsTask::outputDirectory,
+            )
+        },
+        describe = { variant ->
+            val flavorName = variant.productFlavors
+                .single { it.first == "channel" }
+                .second
+            val mainOutput = variant.outputs.single()
+            BuildAssetVariant(
+                name = variant.name,
+                flavor = flavorName,
+                buildType = requireNotNull(variant.buildType),
+                mappingFile = variant.artifacts.get(
+                    SingleArtifact.OBFUSCATION_MAPPING_FILE,
+                ),
+                versionCode = mainOutput.versionCode,
+                versionName = mainOutput.versionName,
+            )
+        },
+        computeTaskName = { variant, action, subject ->
+            variant.computeTaskName(action, subject)
+        },
+    )
+
+configureBuildAssets(
+    androidComponents = androidComponents,
+    adapter = androidBuildAssetAdapter,
+)
+
+androidComponents.onVariants(
+    androidComponents.selector().withBuildType("release"),
+) { variant ->
+    val flavorName = variant.productFlavors
+        .single { it.first == "channel" }
+        .second
+    variant.manifestPlaceholders.put(
+        "buildKey",
+        project.releaseBuildKey(flavorName, gitInfo.commitId),
+    )
+}
+
+if (buildProperty("GKD_RENAME_APK_FLAG").isPresent) {
+    androidComponents.onVariants { variant ->
+        variant.outputs.onEach { output ->
+            output as VariantOutputImpl
+            output.outputFileName = "GKD-XA-v${output.versionName.get()}.apk"
+        }
+    }
+}
+
+composeCompiler {
+    if (providers.gradleProperty("composeReports").isPresent) {
+        reportsDestination = layout.buildDirectory.dir("compose_compiler")
+    }
+    stabilityConfigurationFiles.addAll(
+        rootProject.layout.projectDirectory.file("stability_config.conf"),
+    )
+}
+
+dependencies {
+    implementation(libs.kotlin.stdlib)
+
+    implementation(project(":gkd-aidl"))
+    implementation(project(":gkd-db"))
+    implementation(project(":gkd-selector"))
+
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.service)
+    // viewModel<T>() 之前是靠 navigation3 传递进来的，miuix-nav 接管导航后必须显式声明
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.graphics)
+    implementation(libs.compose.animation)
+    implementation(libs.compose.icons)
+    implementation(libs.compose.preview)
+    debugImplementation(libs.compose.tooling)
+
+    implementation(libs.compose.activity)
+
+    // MIUIX：界面组件、主题和导航。
+    implementation(libs.miuix.ui)
+    implementation(libs.miuix.preference)
+    implementation(libs.miuix.icons)
+    implementation(libs.miuix.blur)
+    implementation(libs.miuix.nav)
+    implementation(libs.loc.annotation)
+
+    // miuix-nav 自己接管 SavedState 与 ViewModelStore 的 entry 装饰，
+    // 因此 navigation3-runtime 与 lifecycle-viewmodel-navigation3 都不再需要。
+
+    testImplementation(libs.junit)
+    testImplementation("org.robolectric:robolectric:4.18")
+    testImplementation("androidx.compose.ui:ui-test-junit4:1.12.1")
+    debugImplementation("androidx.compose.ui:ui-test-manifest:1.12.1")
+    testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.ktor.server.test.host)
+
+    implementation(libs.androidx.concurrent.futures)
+
+    remapApi(project(":gkd-hidden-api"))
+    implementation(libs.rikka.shizuku.api)
+    implementation(libs.rikka.shizuku.provider)
+    implementation(project(":gkd-priv-ui"))
+    implementation(libs.lsposed.hiddenapibypass)
+
+    implementation(libs.androidx.paging.runtime)
+    implementation(libs.androidx.paging.compose)
+
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.cio)
+    implementation(libs.ktor.server.content.negotiation)
+
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
+
+    implementation(libs.google.accompanist.drawablepainter)
+
+    implementation(libs.kotlinx.serialization.core)
+    implementation(libs.kotlinx.serialization.json)
+    // https://github.com/Kotlin/kotlinx-atomicfu/issues/145
+    implementation(libs.kotlinx.atomicfu)
+
+    implementation(libs.reorderable)
+    implementation(libs.morph.compose)
+
+    implementation(libs.androidx.splashscreen)
+
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network)
+    implementation(libs.coil.gif)
+    implementation(libs.telephoto.zoomable)
+
+    implementation(libs.exp4j)
+
+    implementation(libs.toaster)
+    implementation(libs.permissions)
+    implementation(libs.device)
+
+    implementation(libs.json5)
+    compileOnly(libs.codeorigin)
+
+    // compose-webview declares Material but does not use it.
+    implementation(libs.kevinnzouWebview) {
+        exclude(group = "com.google.android.material", module = "material")
+    }
+}

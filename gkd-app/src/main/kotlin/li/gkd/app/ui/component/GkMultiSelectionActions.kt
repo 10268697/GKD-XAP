@@ -1,0 +1,89 @@
+package li.gkd.app.ui.component
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.RowScope
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
+import li.gkd.app.text.UiStrings
+import li.gkd.app.domain.rule.RuleSetting
+
+@Composable
+fun <K> RowScope.GkMultiSelectionActions(
+    selectionState: MultiSelectionState<K>,
+    keys: Set<K>,
+    enabled: Boolean = true,
+    menuContent: @Composable ColumnScope.(dismiss: () -> Unit) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedKeys = selectionState.selectedKeys intersect keys
+    LaunchedEffect(enabled, selectedKeys.isEmpty()) {
+        if (!enabled || selectedKeys.isEmpty()) expanded = false
+    }
+    GkIconButton(
+        imageVector = GkIcons.SelectAll,
+        contentDescription = UiStrings.selection_all,
+        enabled = enabled && keys.isNotEmpty() && selectedKeys != keys,
+        onClick = { selectionState.selectAll(keys) },
+    )
+    GkIconButton(
+        imageVector = GkIcons.InvertSelection,
+        contentDescription = UiStrings.selection_invert,
+        enabled = enabled && keys.isNotEmpty(),
+        onClick = { selectionState.invert(keys) },
+    )
+    PerfDropdownMenu(
+        expanded = expanded && enabled && selectedKeys.isNotEmpty(),
+        onDismissRequest = { expanded = false },
+        enableWindowDim = false,
+        anchor = {
+            GkIconButton(
+                imageVector = GkIcons.MoreVert,
+                contentDescription = UiStrings.more_label,
+                enabled = enabled && selectedKeys.isNotEmpty(),
+                onClick = { expanded = true },
+            )
+        },
+    ) {
+        // Retain the public ColumnScope menu-content API inside Miuix's scrollable popup column.
+        Column {
+            menuContent { expanded = false }
+        }
+    }
+}
+
+@Composable
+fun GkBatchActionMenuItem(
+    text: String,
+    onDismiss: () -> Unit,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    destructive: Boolean = false,
+) {
+    PerfDropdownMenuItem(
+        text = text,
+        enabled = enabled,
+        titleColor = if (destructive) MiuixTheme.colorScheme.error else Color.Unspecified,
+        onClick = {
+            onDismiss()
+            onClick()
+        },
+    )
+}
+
+@Composable
+fun GkRuleBatchMenuItems(
+    enabled: Boolean,
+    onDismiss: () -> Unit,
+    onUpdate: (RuleSetting) -> Unit,
+) {
+    GkBatchActionMenuItem(UiStrings.action_turn_on, onDismiss, { onUpdate(RuleSetting.Enabled) }, enabled)
+    GkBatchActionMenuItem(UiStrings.action_close, onDismiss, { onUpdate(RuleSetting.Disabled) }, enabled)
+    GkBatchActionMenuItem(UiStrings.settings_reset_default, onDismiss, { onUpdate(RuleSetting.FollowDefault) }, enabled)
+}

@@ -1,0 +1,290 @@
+package li.gkd.app.data
+
+import android.accessibilityservice.GestureDescription
+import android.graphics.Path
+import android.view.ViewConfiguration
+import android.view.accessibility.AccessibilityNodeInfo
+import kotlinx.coroutines.delay
+import kotlinx.serialization.Serializable
+import li.gkd.app.a11y.A11yRuntime
+import li.gkd.app.priv.privilegeContextFlow
+import li.gkd.app.priv.toHidden
+import li.gkd.app.a11y.dispatchGestureAndAwait
+import li.gkd.app.service.TrackService
+import li.gkd.app.util.ScreenUtils
+import kotlin.time.Duration.Companion.milliseconds
+
+@Serializable
+data class GkdAction(
+    val selector: String,
+    val fastQuery: Boolean = false,
+    val action: String? = null,
+    override val position: RawSubscription.Position? = null,
+    override val swipeArg: RawSubscription.SwipeArg? = null,
+) : RawSubscription.LocationProps
+
+@Serializable
+data class ActionResult(
+    val action: String,
+    val result: Boolean,
+    val shell: Boolean = false,
+    val position: Pair<Float, Float>? = null,
+)
+
+sealed class ActionPerformer(val action: String) {
+    abstract suspend fun perform(
+        node: AccessibilityNodeInfo,
+        locationProps: RawSubscription.LocationProps,
+    ): ActionResult
+
+    data object ClickNode : ActionPerformer("clickNode") {
+        override suspend fun perform(
+            node: AccessibilityNodeInfo,
+            locationProps: RawSubscription.LocationProps,
+        ): ActionResult {
+            TrackService.addA11yNodePosition(node)
+            return ActionResult(
+                action = action,
+                result = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            )
+        }
+    }
+
+    data object ClickCenter : ActionPerformer("clickCenter") {
+        override suspend fun perform(
+            node: AccessibilityNodeInfo,
+            locationProps: RawSubscription.LocationProps,
+        ): ActionResult {
+            val rect = node.toHidden.boundsInScreen
+            val p = locationProps.position?.calc(rect)
+            val x = p?.first ?: ((rect.right + rect.left) / 2f)
+            val y = p?.second ?: ((rect.bottom + rect.top) / 2f)
+            if (!ScreenUtils.inScreen(x, y)) {
+                return ActionResult(
+                    action = action,
+                    result = false,
+                    position = x to y,
+                )
+            }
+            TrackService.addXyPosition(x, y)
+            // 特权点击也要带 tapTimeout 时长（对齐上游 c8118d0）：duration=0 时
+            // CompatInputManager 走 shell 瞬时 tap，部分应用不认；带时长后走同点 swipe。
+            val tapDurationMillis = ViewConfiguration.getTapTimeout().toLong()
+            return ActionResult(
+                action = action,
+                result = if (
+                    privilegeContextFlow.value?.tap(x, y, tapDurationMillis) == true
+                ) {
+                    true
+                } else {
+                    val gestureDescription = GestureDescription.Builder()
+                    val path = Path()
+                    path.moveTo(x, y)
+                    gestureDescription.addStroke(
+                        GestureDescription.StrokeDescription(
+                            path, 0, tapDurationMillis
+                        )
+                    )
+                    dispatchGestureAndAwait(gestureDescription.build())
+                },
+                position = x to y
+            )
+        }
+    }
+
+    data object Click : ActionPerformer("click") {
+        override suspend fun perform(
+            node: AccessibilityNodeInfo,
+            locationProps: RawSubscription.LocationProps,
+        ): ActionResult {
+            if (node.isClickable) {
+                val result = ClickNode.perform(node, locationProps)
+                if (result.result) {
+                    return result
+                }
+            }
+            return ClickCenter.perform(node, locationProps)
+        }
+    }
+
+    data object LongClickNode : ActionPerformer("longClickNode") {
+        override suspend fun perform(
+            node: AccessibilityNodeInfo,
+            locationProps: RawSubscription.LocationProps,
+        ): ActionResult {
+            TrackService.addA11yNodePosition(node)
+            return ActionResult(
+                action = action,
+                result = node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK).apply {
+                    if (this) {
+                        delay(LongClickCenter.LONG_DURATION.milliseconds)
+                    }
+                }
+            )
+        }
+    }
+
+    data object LongClickCenter : ActionPerformer("longClickCenter") {
+        const val LONG_DURATION = 500L
+        override suspend fun perform(
+            node: AccessibilityNodeInfo,
+            locationProps: RawSubscription.LocationProps,
+        ): ActionResult {
+            val rect = node.toHidden.boundsInScreen
+            val p = locationProps.position?.calc(rect)
+            val x = p?.first ?: ((rect.right + rect.left) / 2f)
+            val y = p?.second ?: ((rect.bottom + rect.top) / 2f)
+            // 某些系统的 ViewConfiguration.getLongPressTimeout() 返回 300 , 这将导致触发普通的 click 事件
+            if (!ScreenUtils.inScreen(x, y)) {
+                return ActionResult(
+                    action = action,
+                    result = false,
+                    position = x to y,
+                )
+            }
+            TrackService.addXyPosition(x, y)
+            return ActionResult(
+                action = action,
+                result = if (
+                    privilegeContextFlow.value?.tap(x, y, LONG_DURATION) == true
+                ) {
+                    true
+                } else {
+                    val gestureDescription = GestureDescription.Builder()
+                    val path = Path()
+                    path.moveTo(x, y)
+                    gestureDescription.addStroke(
+                        GestureDescription.StrokeDescription(
+                            path, 0, LONG_DURATION
+                        )
+                    )
+                    dispatchGestureAndAwait(gestureDescription.build())
+                },
+                position = x to y
+            )
+        }
+    }
+
+    data object LongClick : ActionPerformer("longClick") {
+        override suspend fun perform(
+            node: AccessibilityNodeInfo,
+            locationProps: RawSubscription.LocationProps,
+        ): ActionResult {
+            if (node.isLongClickable) {
+                val result = LongClickNode.perform(node, locationProps)
+                if (result.result) {
+                    return result
+                }
+            }
+            return LongClickCenter.perform(node, locationProps)
+        }
+    }
+
+    data object Back : ActionPerformer("back") {
+        override suspend fun perform(
+            node: AccessibilityNodeInfo,
+            locationProps: RawSubscription.LocationProps,
+        ): ActionResult {
+            return ActionResult(
+                action = action,
+                result = A11yRuntime.performActionBack()
+            )
+        }
+    }
+
+    data object None : ActionPerformer("none") {
+        override suspend fun perform(
+            node: AccessibilityNodeInfo,
+            locationProps: RawSubscription.LocationProps,
+        ): ActionResult {
+            return ActionResult(
+                action = action,
+                result = true
+            )
+        }
+    }
+
+    data object Swipe : ActionPerformer("swipe") {
+        override suspend fun perform(
+            node: AccessibilityNodeInfo,
+            locationProps: RawSubscription.LocationProps,
+        ): ActionResult {
+            val rect = node.toHidden.boundsInScreen
+            val swipeArg = locationProps.swipeArg ?: return ActionResult(
+                action = action,
+                result = false,
+            )
+            val startP = swipeArg.start.calc(rect)
+            val endP = swipeArg.end?.calc(rect) ?: startP
+            if (startP == null || endP == null) {
+                return ActionResult(
+                    action = action,
+                    result = false,
+                )
+            }
+            val startX = startP.first
+            val startY = startP.second
+            val endX = endP.first
+            val endY = endP.second
+            if (!(ScreenUtils.inScreen(startX, startY) && ScreenUtils.inScreen(endX, endY))) {
+                return ActionResult(
+                    action = action,
+                    result = false,
+                    position = endX to endY,
+                )
+            }
+            TrackService.addSwipePosition(startX, startY, endX, endY, swipeArg.duration)
+            return if (
+                privilegeContextFlow.value?.swipe(
+                    startX,
+                    startY,
+                    endX,
+                    endY,
+                    swipeArg.duration,
+                ) == true
+            ) {
+                ActionResult(
+                    action = action,
+                    result = true,
+                    shell = true,
+                    position = endX to endY,
+                )
+            } else {
+                val gestureDescription = GestureDescription.Builder()
+                val path = Path()
+                path.moveTo(startX, startY)
+                path.lineTo(endX, endY)
+                gestureDescription.addStroke(
+                    GestureDescription.StrokeDescription(
+                        path, 0, swipeArg.duration
+                    )
+                )
+                ActionResult(
+                    action = action,
+                    result = dispatchGestureAndAwait(gestureDescription.build()),
+                    position = endX to endY,
+                )
+            }
+        }
+    }
+
+    companion object {
+        private val allSubObjects by lazy {
+            arrayOf(
+                ClickNode,
+                ClickCenter,
+                Click,
+                LongClickNode,
+                LongClickCenter,
+                LongClick,
+                Back,
+                None,
+                Swipe,
+            )
+        }
+
+        fun getAction(action: String?): ActionPerformer {
+            return allSubObjects.find { it.action == action } ?: Click
+        }
+    }
+}
