@@ -85,6 +85,7 @@ miuix-icons = { module = "top.yukonga.miuix.kmp:miuix-icons-android", version.re
 miuix-blur = { module = "top.yukonga.miuix.kmp:miuix-blur-android", version.ref = "miuix" }
 miuix-nav = { module = "top.yukonga.miuix.kmp:miuix-nav-android", version.ref = "miuix" }
 miuix-material = { module = "top.yukonga.miuix.kmp:miuix-material-android", version.ref = "miuix" }
+miuix-glass = { module = "top.yukonga.miuix.kmp:miuix-glass-android", version.ref = "miuix" }
 androidx-junit = "androidx.test.ext:junit:1.3.0"
 androidx-espresso = "androidx.test.espresso:espresso-core:3.7.0"
 activityResultLauncher = "com.github.DylanCaiCoding:ActivityResultLauncher:1.1.2"

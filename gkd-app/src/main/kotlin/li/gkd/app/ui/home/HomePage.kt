@@ -42,7 +42,6 @@ import li.gkd.app.ui.component.GkIcons
 import li.gkd.app.ui.component.PerfIcon
 import li.gkd.app.ui.component.rememberContentReady
 import li.gkd.app.ui.component.rememberNavTransitionRunning
-import li.gkd.app.ui.liquid.IosLiquidGlassNavigationBar
 import li.gkd.app.ui.share.LocalLayerBackdrop
 import li.gkd.app.ui.share.LocalMiuixBlurActive
 import top.yukonga.miuix.kmp.basic.FloatingNavigationBar
@@ -50,7 +49,8 @@ import top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem
 import top.yukonga.miuix.kmp.basic.FloatingToolbarDefaults
 import top.yukonga.miuix.kmp.basic.NavigationBar as MiuixNavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem as MiuixNavigationBarItem
-import top.yukonga.miuix.kmp.basic.NavigationItem
+import top.yukonga.miuix.kmp.glass.GlassNavigationBar
+import top.yukonga.miuix.kmp.glass.GlassNavigationItem
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurColors
 import top.yukonga.miuix.kmp.blur.BlurDefaults
@@ -405,17 +405,16 @@ private fun MiuixFloatingNavScaffold(
                             .fillMaxWidth(),
                     ) {
                         val barItems = remember(navItems) {
-                            navItems.map { NavigationItem(label = it.label, icon = it.icon) }
+                            navItems.map { GlassNavigationItem(icon = it.icon, label = it.label) }
                         }
                         if (liquidGlass) {
-                            IosLiquidGlassNavigationBar(
+                            GlassNavigationBar(
                                 items = barItems,
                                 selectedIndex = selectedIndex.coerceIn(0, navItems.lastIndex),
-                                onItemClick = { index ->
+                                onSelect = { index ->
                                     navItems.getOrNull(index)?.let { mainVm.handleClickTab(it) }
                                 },
                                 backdrop = backdrop,
-                                isBlurActive = glassActive,
                             )
                         } else {
                             FloatingNavigationBar(

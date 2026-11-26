@@ -263,6 +263,7 @@ dependencies {
     implementation(libs.miuix.blur)
     implementation(libs.miuix.nav)
     implementation(libs.miuix.material)
+    implementation(libs.miuix.glass)
     implementation(libs.loc.annotation)
 
     // miuix-nav 自己接管 SavedState 与 ViewModelStore 的 entry 装饰，
