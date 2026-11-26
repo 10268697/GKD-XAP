@@ -23,6 +23,7 @@ import li.gkd.app.store.AppStore.blockA11yAppListFlow
 import li.gkd.app.store.AppStore.storeFlow
 import li.gkd.app.text.UiStrings
 import li.gkd.app.ui.component.GkAnimatedBooleanContent
+import li.gkd.app.ui.component.autoFocus
 import li.gkd.app.ui.component.GkAnimatedFloatingActionButton
 import li.gkd.app.ui.component.GkAppBarTextField
 import li.gkd.app.ui.component.GkAppCheckboxCard
@@ -68,6 +69,8 @@ fun BlockA11yAppListPage() {
     val showAllApps by vm.appFilter.showAllAppFlow.collectAsStateWithLifecycle()
     val searchStr by vm.searchStrFlow.collectAsStateWithLifecycle()
     val showSearchBar by vm.showSearchBarFlow.collectAsStateWithLifecycle()
+    // 搜索栏若在进入页面时就已展开，说明是上次保留的状态，此时不应抢焦点弹键盘。
+    val firstShowSearchBar = remember { showSearchBar }
     val editable by vm.editableFlow.collectAsStateWithLifecycle()
     val editText by vm.textFlow.collectAsStateWithLifecycle()
     val pageScrollState = rememberListScrollState(canScroll = { !editable })
@@ -126,7 +129,7 @@ fun BlockA11yAppListPage() {
                             value = searchStr,
                             onValueChange = vm::setSearchStr,
                             hint = UiStrings.app_name_id_input_hint,
-                            modifier = Modifier,
+                            modifier = if (firstShowSearchBar) Modifier else Modifier.autoFocus(),
                         )
                     }
                 },

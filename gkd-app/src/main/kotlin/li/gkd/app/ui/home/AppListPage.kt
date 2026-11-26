@@ -49,6 +49,7 @@ import li.gkd.app.ui.component.GkRuleStatsData
 import li.gkd.app.ui.component.GkEmptyState
 import li.gkd.app.ui.component.GkIcons
 import li.gkd.app.ui.component.GkQueryPkgAuthCard
+import li.gkd.app.ui.component.autoFocus
 import li.gkd.app.ui.component.PerfIcon
 import li.gkd.app.ui.component.PerfTopAppBar
 import li.gkd.app.ui.component.PerfIconButton
@@ -79,6 +80,8 @@ fun useAppListPage(): ScaffoldExt {
     val ruleSummary = state.ruleSummary
 
     val showSearchBar = state.showSearchBar
+    // 搜索栏若在进入页面时就已展开，说明是上次保留的状态，此时不应抢焦点弹键盘。
+    val firstShowSearchBar = remember { showSearchBar }
     val refreshing = state.refreshing
     val pullToRefreshState = rememberPullToRefreshState()
     val editWhiteListMode = state.editWhiteListMode
@@ -114,7 +117,7 @@ fun useAppListPage(): ScaffoldExt {
                             value = searchStr,
                             onValueChange = vm::setSearchText,
                             hint = UiStrings.app_name_id_input_hint,
-                            modifier = Modifier,
+                            modifier = if (firstShowSearchBar) Modifier else Modifier.autoFocus(),
                         )
                     }
                 },
