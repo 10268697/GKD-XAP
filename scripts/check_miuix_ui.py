@@ -27,7 +27,9 @@ def audit():
     if "implementation(libs.priv.kit.ui)" in build or "priv-ui-android:" in build:
         errors.append("Do not combine the source fork with the published UI artifact")
     versions = (ROOT / "gradle/libs.versions.toml").read_text()
-    if not re.search(r'^miuix = "0\.9\.4"$', versions, re.M):
+    # Bump this together with the pin: 0.9.5 moved blur.* into miuix-material and replaced
+    # Highlight/BloomStroke with EdgeStroke, so the renderer audit was redone for that release.
+    if not re.search(r'^miuix = "0\.9\.5', versions, re.M):
         errors.append("Update the pinned native API audit and rendering tests before changing Miuix")
     aliases = {"PerfSwitch": "GkSwitch", "PerfCheckbox": "GkCheckbox",
                "TextSwitch": "GkTextSwitch", "SettingItem": "GkSettingItem"}
