@@ -32,33 +32,37 @@ import li.gkd.app.ui.share.LocalLayerBackdrop
 import li.gkd.app.util.TimeUtils.throttle
 import top.yukonga.miuix.kmp.blur.blur
 import top.yukonga.miuix.kmp.blur.drawBackdrop
-import top.yukonga.miuix.kmp.blur.highlight.BloomStroke
-import top.yukonga.miuix.kmp.blur.highlight.Highlight
-import top.yukonga.miuix.kmp.blur.highlight.LightPosition
-import top.yukonga.miuix.kmp.blur.highlight.LightSource
-import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.material.EdgeLightSource
+import top.yukonga.miuix.kmp.material.EdgePeak
+import top.yukonga.miuix.kmp.material.EdgeStroke
+import top.yukonga.miuix.kmp.material.edgeStroke
+import top.yukonga.miuix.kmp.material.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private const val elevationDurationMillis = 50
 
-private val FabGlassHighlight = Highlight(
+// miuix 0.9.5: Highlight/BloomStroke/LightSource were replaced by EdgeStroke/EdgeLightSource.
+// LightPosition(x, y, z) is now inlined into EdgeLightSource(x, y, z), `dualPeak = true` maps to
+// `peak = EdgePeak.Dual`, and Highlight.alpha moved to the `alpha` argument of Modifier.edgeStroke.
+private val FabGlassEdgeStroke = EdgeStroke(
     width = 1.dp,
-    alpha = 1f,
-    style = BloomStroke(
-        color = Color.White.copy(alpha = 0.16f),
-        innerBlurRadius = 2.0.dp,
-        primaryLight = LightSource(
-            position = LightPosition(0.5f, -0.3f, -0.05f),
-            color = Color.White,
-            intensity = 1f,
-        ),
-        secondaryLight = LightSource(
-            position = LightPosition(0.5f, 0.8f, -0.5f),
-            color = Color.White,
-            intensity = 0.4f,
-        ),
-        dualPeak = true,
+    bevel = 2.0.dp,
+    color = Color.White.copy(alpha = 0.16f),
+    primary = EdgeLightSource(
+        x = 0.5f,
+        y = -0.3f,
+        z = -0.05f,
+        color = Color.White,
+        intensity = 1f,
     ),
+    secondary = EdgeLightSource(
+        x = 0.5f,
+        y = 0.8f,
+        z = -0.5f,
+        color = Color.White,
+        intensity = 0.4f,
+    ),
+    peak = EdgePeak.Dual,
 )
 
 @Composable
@@ -145,8 +149,11 @@ private fun LiquidGlassFab(
                                 refractionAmount = 16.dp.toPx(),
                             )
                         },
-                        highlight = { FabGlassHighlight.copy(alpha = 0.75f) },
                         onDrawSurface = { drawRect(containerColor) },
+                    ).edgeStroke(
+                        shape = shape,
+                        stroke = FabGlassEdgeStroke,
+                        alpha = 0.75f,
                     )
                 } else {
                     Modifier

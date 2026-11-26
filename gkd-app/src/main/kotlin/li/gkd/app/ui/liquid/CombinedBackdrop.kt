@@ -32,11 +32,16 @@ class CombinedBackdrop(
     override val offsetResidualX: Float get() = first.offsetResidualX
     override val offsetResidualY: Float get() = first.offsetResidualY
 
+    // miuix 0.9.5: Backdrop gained `backdropCoordinates` (used to clamp blur padding at edges).
+    // The combined surface is anchored to [first], so inherit its coordinates.
+    override val backdropCoordinates: LayoutCoordinates? get() = first.backdropCoordinates
+
+    // miuix 0.9.5: `downscaleFactor` changed from Int to Float.
     override fun DrawScope.drawBackdrop(
         density: Density,
         coordinates: LayoutCoordinates?,
         layerBlock: (GraphicsLayerScope.() -> Unit)?,
-        downscaleFactor: Int,
+        downscaleFactor: Float,
     ) {
         with(first) { drawBackdrop(density, coordinates, layerBlock, downscaleFactor) }
         with(second) { drawBackdrop(density, coordinates, layerBlock, downscaleFactor) }

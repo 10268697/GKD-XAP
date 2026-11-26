@@ -27,6 +27,9 @@ plugins {
 
 object Cfg {
     val compileSdk get() = 37
+    // miuix 0.9.5-beta04 的 AAR metadata 要求 compileSdk >= 37.2（Android 37 minor 2）。
+    // 这是解析期的硬校验，只升平台号即可，不影响 minSdk(26) / targetSdk。
+    val compileSdkMinor get() = 2
     val buildToolsVersion get() = "37.0.0"
     val minSdk get() = 26
     val targetSdk get() = compileSdk
@@ -74,6 +77,7 @@ subprojects {
     plugins.withType<AppPlugin> {
         extensions.getByType(ApplicationExtension::class.java).apply {
             compileSdk = Cfg.compileSdk
+            compileSdkMinor = Cfg.compileSdkMinor
             buildToolsVersion = Cfg.buildToolsVersion
             defaultConfig {
                 minSdk = Cfg.minSdk
@@ -88,6 +92,7 @@ subprojects {
     plugins.withType<LibraryPlugin> {
         extensions.getByType(LibraryExtension::class.java).apply {
             compileSdk = Cfg.compileSdk
+            compileSdkMinor = Cfg.compileSdkMinor
             buildToolsVersion = Cfg.buildToolsVersion
             defaultConfig {
                 minSdk = Cfg.minSdk
