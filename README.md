@@ -1,6 +1,7 @@
 # GKD-XAP 融合版
 
-基于 [GKD](https://github.com/gkd-kit/gkd) 的 Android 自定义屏幕点击应用分支，界面 100% 保留原 MIUIX 风格，底层跟随上游新架构。
+来自上游[GKD-XA](https://github.com/84593320z/GKD-XA) 对其完成了修复应用列表点击排序闪退问题，并基于MIUIX 0.95-rc01重构界面。
+而GKD-XA是基于 [GKD](https://github.com/gkd-kit/gkd) 的 Android 自定义屏幕点击应用分支，界面 100% 保留原 MIUIX 风格，底层跟随上游新架构。
 
 通过自定义规则，在指定界面满足条件（如屏幕存在特定文字）时，点击节点、位置或执行其他操作。
 
@@ -137,7 +138,9 @@ benchmark/build/outputs/connected_android_test_additional_output/gkdNonMinifiedP
 
 ## 开源致谢
 
-本项目在 [GKD](https://github.com/gkd-kit/gkd)（GPL-3.0）与 [hanchuan8/gkd-miuix](https://github.com/hanchuan8/gkd-miuix)（GPL-3.0）基础上开发，并使用了下列开源项目（不完全列表）：
+本项目在 
+[GKD-XA](https://github.com/84593320z/GKD-XA) （GPL-3.0）、
+[GKD](https://github.com/gkd-kit/gkd)（GPL-3.0）与 [gkd-miuix](https://github.com/hanchuan8/gkd-miuix)（GPL-3.0）基础上开发，并使用了下列开源项目（不完全列表）：
 
 | 项目 | 说明 | 链接 |
 | ---- | ---- | ---- |
