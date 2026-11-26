@@ -161,6 +161,21 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun restoreKeepsTheRunningAppsOwnIdInTheBlockList() = runBlocking {
+        withRepository(selfAppId = "li.songe.gkdxap") { repository, _ ->
+            assertEquals(setOf("li.songe.gkdxap"), repository.blockMatchAppList.value)
+
+            // 备份里带的是备份方自己的包名；恢复后当前包名必须补回去，否则会点击自己的界面。
+            repository.withBackupRestore(mapOf("block_match_app_list.txt" to "imported.app")) {}
+
+            assertEquals(
+                setOf("imported.app", "li.songe.gkdxap"),
+                repository.blockMatchAppList.value,
+            )
+        }
+    }
+
+    @Test
     fun successfulRestoreKeepsImportedValuesAndLaterCommands() = runBlocking {
         withRepository { repository, directory ->
             val result = repository.withBackupRestore(mapOf("action_count.txt" to "100")) {
@@ -248,12 +263,16 @@ class SettingsRepositoryTest {
         }
     }
 
-    private suspend fun withRepository(block: suspend (SettingsRepository, java.io.File) -> Unit) {
+    private suspend fun withRepository(
+        selfAppId: String? = null,
+        block: suspend (SettingsRepository, java.io.File) -> Unit,
+    ) {
         val directory = Files.createTempDirectory("gkd-settings-restore-test").toFile()
         val writer = SupervisorJob()
         try {
             val repository = SettingsRepository(
                 directory, CoroutineScope(writer + Dispatchers.Default), ::testDefaults, ::emptySet,
+                selfAppId,
             )
             withTimeout(10_000) { block(repository, directory) }
         } finally {

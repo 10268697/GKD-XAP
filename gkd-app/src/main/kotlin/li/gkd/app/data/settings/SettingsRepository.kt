@@ -33,7 +33,8 @@ private fun decodeBackupAppList(text: String): Set<String> = text.lineSequence()
  * written when the store is first created, so a restorable backup or a rename of the application id
  * would leave the old id behind and leak the current one back into matching.
  */
-private fun Set<String>.withSelfBlocked(): Set<String> = if (contains(META.appId)) this else this + META.appId
+private fun Set<String>.withSelfBlocked(selfAppId: String?): Set<String> =
+    if (selfAppId == null || contains(selfAppId)) this else this + selfAppId
 
 private class PreparedValueRestore(
     val begin: () -> Unit,
@@ -184,6 +185,8 @@ class SettingsRepository(
     scope: CoroutineScope,
     defaultSettings: () -> SettingsStore,
     defaultBlockMatchAppList: () -> Set<String>,
+    // JVM 单测里没有 Application 实例，META 读不到；读不到就跳过，真机上始终能读到。
+    private val selfAppId: String? = runCatching { META.appId }.getOrNull(),
 ) {
     private val restoreMutex = Mutex()
     private val stateLock = Any()
@@ -222,9 +225,9 @@ class SettingsRepository(
     private val blockMatchAppListValue = PersistedValue(
         filename = "block_match_app_list.txt",
         file = storeFolder.resolve("block_match_app_list.txt"),
-        decode = { (it?.let(AppListString::decode) ?: defaultBlockMatchAppList()).withSelfBlocked() },
+        decode = { (it?.let(AppListString::decode) ?: defaultBlockMatchAppList()).withSelfBlocked(selfAppId) },
         encode = AppListString::encode,
-        decodeRestore = { decodeBackupAppList(it).withSelfBlocked() },
+        decodeRestore = { decodeBackupAppList(it).withSelfBlocked(selfAppId) },
         scope = scope,
         stateLock = stateLock,
     )
