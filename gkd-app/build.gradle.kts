@@ -107,16 +107,12 @@ android {
             isShrinkResources = true
             isDebuggable = false
             signingConfig = gkdSigningConfig
-            // 本地验证用：perf 默认沿用官方包名 li.songe.gkdx，无法与正式版共存；
-            // 加 .perf 后缀后可与正式版并存，且保持 R8 优化后的体积与性能。
-            applicationIdSuffix = ".perf"
             matchingFallbacks += listOf("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
             resValue("color", "better_black", "#FF5D92")
-            resValue("string", "app_name", "GKD-XAP-perf")
         }
         debug {
             signingConfig = gkdSigningConfig

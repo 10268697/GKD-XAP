@@ -102,7 +102,7 @@
 | 类型 | 包名 | 说明 |
 | ---- | ---- | ---- |
 | `debug` | `li.songe.gkdxap.debug` | 调试版，应用名带 `Debug` 后缀 |
-| `perf` | `li.songe.gkdxap.perf` | 性能实测版：启用 R8 优化与资源压缩、`isDebuggable=false`；可与 `release` 并存 |
+| `perf` | `li.songe.gkdxap` | 性能实测版：启用 R8 优化与资源压缩、`isDebuggable=false`；与 `release` 同包名，二者互相覆盖 |
 | `release` | `li.songe.gkdxap` | 发布版，开启 R8 混淆与资源压缩 |
 
 日常测试建议用 `perf`：
