@@ -1,11 +1,7 @@
 package li.gkd.app.ui.component
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -114,44 +110,29 @@ fun PerfDropdownMenuItem(
             disabledColor = titleColor.copy(alpha = 0.4f),
         )
     }
-    // 不要改回 startAction / endActions 槽位：miuix 0.9.4 的 BasicComponent 在这两个槽位
-    // 有内容时，measure 里会算 endHardCap = (maxWidth - startWidth - spacer) * 6 / 10。
-    // 而 ListPopupColumn 的固有测量是用 maxIntrinsicWidth(Int.MAX_VALUE) 探测宽度的，
-    // 此时 maxWidth = Int.MAX_VALUE，乘 6 直接溢出成负数，随后
-    // looseConstraints.copy(maxWidth = 负数) 抛
-    // IllegalArgumentException: maxWidth must be >= than minWidth，下拉菜单必崩。
-    // （上游 issue：compose-miuix-ui/miuix#468，0.9.5-beta 用 hasBoundedWidth 判断修掉了。）
-    // 这里把图标/尾部控件放进 content 槽位自己摆一行，测量只走普通 Column，宽度仍自适应。
+    // 早期这里把 startAction / endActions 塞进 content 自绘，是为了绕开 miuix 0.9.4 的
+    // BasicComponent 溢出：那两个槽位有内容时，measure 会算
+    // endHardCap = (maxWidth - startWidth - spacer) * 6 / 10，而 ListPopupColumn 用
+    // maxIntrinsicWidth(Int.MAX_VALUE) 探测宽度，乘 6 溢出成负数，随后 Constraints.copy()
+    // 抛 "maxWidth must be >= than minWidth"（上游 issue compose-miuix-ui/miuix#468）。
+    // 0.9.5 已用 constraints.hasBoundedWidth 判断 + coerceAtLeast(0) 修掉，故还原成官方槽位。
     BasicComponent(
         modifier = modifier.semantics(mergeDescendants = true) {
             this.role = role
             if (!enabled) disabled()
         },
+        startAction = startAction,
+        endActions = endActions,
         enabled = enabled,
         onClick = onClick,
         onClickLabel = onClickLabel,
         role = role,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (startAction != null) {
-                startAction()
-                Spacer(Modifier.width(8.dp))
-            }
-            Text(
-                text = text,
-                modifier = Modifier.weight(1f),
-                fontSize = MiuixTheme.textStyles.headline1.fontSize,
-                fontWeight = FontWeight.Medium,
-                color = if (enabled) colors.color else colors.disabledColor,
-            )
-            if (endActions != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    endActions()
-                }
-            }
-        }
+        Text(
+            text = text,
+            fontSize = MiuixTheme.textStyles.headline1.fontSize,
+            fontWeight = FontWeight.Medium,
+            color = if (enabled) colors.color else colors.disabledColor,
+        )
     }
 }
