@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import li.gkd.app.META
 import li.gkd.app.text.UiStrings
 import li.gkd.app.util.AppListString
 import li.gkd.app.util.LogUtils
@@ -25,6 +26,14 @@ import java.nio.file.StandardCopyOption
 private fun decodeBackupAppList(text: String): Set<String> = text.lineSequence()
     .map(String::trim).filter { it.isNotEmpty() && !it.startsWith("#") }
     .onEach { require(it.isValidAppId()) { "Invalid application id in backup" } }.toSet()
+
+/**
+ * The app's own package id always belongs in the block list, otherwise GKD would match and click
+ * through its own UI. Depending on the stored file alone is not enough: the default list is only
+ * written when the store is first created, so a restorable backup or a rename of the application id
+ * would leave the old id behind and leak the current one back into matching.
+ */
+private fun Set<String>.withSelfBlocked(): Set<String> = if (contains(META.appId)) this else this + META.appId
 
 private class PreparedValueRestore(
     val begin: () -> Unit,
@@ -213,9 +222,9 @@ class SettingsRepository(
     private val blockMatchAppListValue = PersistedValue(
         filename = "block_match_app_list.txt",
         file = storeFolder.resolve("block_match_app_list.txt"),
-        decode = { it?.let(AppListString::decode) ?: defaultBlockMatchAppList() },
+        decode = { (it?.let(AppListString::decode) ?: defaultBlockMatchAppList()).withSelfBlocked() },
         encode = AppListString::encode,
-        decodeRestore = ::decodeBackupAppList,
+        decodeRestore = { decodeBackupAppList(it).withSelfBlocked() },
         scope = scope,
         stateLock = stateLock,
     )
