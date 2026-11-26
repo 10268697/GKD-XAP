@@ -28,11 +28,18 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: python3 scripts/release_metadata.py validate --tag "$TAG"
-      - name: Run all regression gates before loading signing secrets
+      # Split into separate steps: one combined run only reports "exit code 1" without naming
+      # which gate failed. Signing secrets are only loaded after all of them pass.
+      - name: Release metadata regressions
         run: |
+          python3 --version
           python3 -B -m unittest discover -s scripts -p "test_*.py"
-          python3 scripts/check_miuix_ui.py
-          python3 gkd-priv-ui/tools/verify_fork.py
+      - name: Miuix UI architecture gate
+        run: python3 scripts/check_miuix_ui.py
+      - name: Priv-UI fork audit
+        run: python3 gkd-priv-ui/tools/verify_fork.py
+      - name: App, selector and database unit tests
+        run: |
           chmod +x ./gradlew
           ./gradlew gkd-priv-ui:testDebugUnitTest gkd-app:testGkdDebugUnitTest gkd-selector:jvmTest gkd-db:jvmTest --stacktrace
       - name: Build with the repository release key

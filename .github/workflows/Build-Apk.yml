@@ -28,11 +28,18 @@ jobs:
       - uses: gradle/actions/setup-gradle@4c125117fe7c5aed11272ec4213f602f012f89f2 # v5
       - name: Validate release metadata
         run: python3 scripts/release_metadata.py validate
+      # Split into separate steps on purpose: a combined run only ever reports "exit code 1"
+      # without saying which gate failed.
+      - name: Release metadata regressions
+        run: |
+          python3 --version
+          python3 -B -m unittest discover -s scripts -p "test_*.py"
+      - name: Miuix UI architecture gate
+        run: python3 scripts/check_miuix_ui.py
+      - name: Priv-UI fork audit
+        run: python3 gkd-priv-ui/tools/verify_fork.py
       - name: Run app, selector and database regressions
         run: |
-          python3 -B -m unittest discover -s scripts -p "test_*.py"
-          python3 scripts/check_miuix_ui.py
-          python3 gkd-priv-ui/tools/verify_fork.py
           chmod +x ./gradlew
           ./gradlew gkd-priv-ui:testDebugUnitTest gkd-app:testGkdDebugUnitTest gkd-selector:jvmTest gkd-db:jvmTest --stacktrace
       - name: Build optimized verification APK
