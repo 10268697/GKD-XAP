@@ -1,6 +1,5 @@
 package li.gkd.app.feature.settings
 
-import li.gkd.app.data.settings.ScanBoost
 import li.gkd.app.service.TrackService
 import li.gkd.app.text.UiStrings
 import li.gkd.app.store.AppStore.storeFlow
@@ -30,36 +29,6 @@ class AdvancedVm : BaseViewModel() {
 
     fun setAutoClearMemorySubs(enabled: Boolean) {
         AppStore.updateSettings { it.copy(autoClearMemorySubs = enabled) }
-    }
-
-    fun setScanBoostEnabled(enabled: Boolean) {
-        AppStore.updateSettings { it.copy(scanBoostEnabled = enabled) }
-    }
-
-    fun saveScanBoostWindowSeconds(value: String): Boolean {
-        val seconds = value.toIntOrNull()
-        val min = ScanBoost.MIN_WINDOW_MILLIS / 1000
-        val max = ScanBoost.MAX_WINDOW_MILLIS / 1000
-        if (seconds == null || seconds !in min..max) {
-            toast("窗口时长需在 $min–$max 秒之间")
-            return false
-        }
-        if (seconds * 1000 == storeFlow.value.scanBoostWindowMillis) return true
-        AppStore.updateSettings { it.copy(scanBoostWindowMillis = seconds * 1000) }
-        toast(UiStrings.update_success)
-        return true
-    }
-
-    fun saveScanBoostIntervalMs(value: String): Boolean {
-        val millis = value.toIntOrNull()
-        if (millis == null || millis !in ScanBoost.MIN_INTERVAL_MILLIS..ScanBoost.MAX_INTERVAL_MILLIS) {
-            toast("扫描间隔需在 ${ScanBoost.MIN_INTERVAL_MILLIS}–${ScanBoost.MAX_INTERVAL_MILLIS} 毫秒之间")
-            return false
-        }
-        if (millis == storeFlow.value.scanBoostIntervalMillis) return true
-        AppStore.updateSettings { it.copy(scanBoostIntervalMillis = millis) }
-        toast(UiStrings.update_success)
-        return true
     }
 
     fun setAiEnable(enabled: Boolean) {

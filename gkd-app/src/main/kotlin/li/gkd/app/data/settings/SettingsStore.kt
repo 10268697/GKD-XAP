@@ -86,25 +86,11 @@ data class AiConfig(
 
 fun newAiProviderId(): String = java.util.UUID.randomUUID().toString()
 
-/** 「启动窗口补扫」的取值范围，界面输入与规则引擎共用，避免两处钳制不一致。 */
-object ScanBoost {
-    const val MIN_WINDOW_MILLIS = 1_000
-    const val MAX_WINDOW_MILLIS = 20_000
-    const val MIN_INTERVAL_MILLIS = 200
-    const val MAX_INTERVAL_MILLIS = 3_000
-}
-
 @Serializable
 data class SettingsStore(
     val enableAutomator: Boolean = false,
     val automatorMode: Int = AutomatorModeOption.A11yMode.value,
     val enableMatch: Boolean = true,
-    /** 应用/活动切换后在该窗口内主动补扫，弥补「广告页不发无障碍事件」的漏匹配。默认关闭。 */
-    val scanBoostEnabled: Boolean = false,
-    /** 补扫窗口时长，毫秒。窗口结束后完全回到事件驱动。 */
-    val scanBoostWindowMillis: Int = 6000,
-    /** 补扫间隔，毫秒。GKD 单次是全量规则匹配，比专用跳过工具重，不宜低于 300。 */
-    val scanBoostIntervalMillis: Int = 500,
     val enableStatusService: Boolean = false,
     val excludeFromRecents: Boolean = false,
     val captureScreenshot: Boolean = false,
