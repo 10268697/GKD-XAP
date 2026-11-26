@@ -251,12 +251,22 @@ object ToastUtils {
      * 而且这个分支只取决于系统里是否给过悬浮窗权限，会出现「同一个 App 换包名后
      * toast 样式突然变了、还多一条系统提示」这种诡异差异。固定走 ActivityToast
      * （画在 Activity 上）或 SystemToast（系统渲染），两者都不占用悬浮窗权限。
+     *
+     * 注意：默认实现是在 createToast() 内部调 diyToastStyle() 把 params.style 的 view
+     * 注入 toast 的（ToastStrategy 15.0 的 ShowToastRunnable 只做 setDuration/setText/show，
+     * 不碰 view）。这里自建实例必须自己补这一步，否则 ActivityToast 拿不到 view，
+     * 表现就是「toast 完全不出现」。
      */
     private fun setToastStrategy() {
         Toaster.setStrategy(object : ToastStrategy(app) {
             override fun createToast(params: ToastParams): IToast {
                 val activity = toastActivity
-                return if (activity != null) ActivityToast(activity) else SystemToast(app)
+                return if (activity != null) {
+                    ActivityToast(activity).also { diyToastStyle(it, params.style) }
+                } else {
+                    // SDK>=30 时自定义 view 的系统 toast 会被系统丢弃，交给系统画纯文本
+                    SystemToast(app)
+                }
             }
         })
     }
