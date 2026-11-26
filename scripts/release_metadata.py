@@ -10,8 +10,9 @@ import shutil
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-# Verified from the published v1.5.1 APK (SHA-256 2c23ecd1...328708).
-RELEASE_SIGNER_SHA256 = "9361daaec8ad21965fb3b658dcfc57ebaebfc0a06df157df6d60e0438e072ea9"
+# GKD-XAP release key (CN=GKD-XAP, OU=GKD-XAP, O=10268697, C=CN), generated 2026-11-26.
+# Replaces the GKD-X certificate 9361daae...072ea9 that signed releases up to v1.5.5.
+RELEASE_SIGNER_SHA256 = "d423cf4607344aa48869ea0562cbfdad07a979e60b5745fbd1f785d7f06fbfa8"
 
 def load(path):
     return json.loads(path.read_text(encoding="utf-8"))
@@ -37,7 +38,7 @@ def validate(root, tag=None):
         data = load(root / f"version/{channel}.json")
         if (data["versionCode"], data["versionName"]) != (code, name):
             raise ValueError(f"{channel}: identity mismatch")
-        expected_url = f"https://github.com/84593320z/GKD-XAP/releases/download/{expected_tag}/GKD-XAP-{expected_tag}.apk"
+        expected_url = f"https://github.com/10268697/GKD-XAP/releases/download/{expected_tag}/GKD-XAP-{expected_tag}.apk"
         if data["downloadUrl"] != expected_url:
             raise ValueError(f"{channel}: artifact URL mismatch")
         size, digest = data["fileSize"], data.get("sha256")
@@ -109,7 +110,7 @@ def backfill(args):
     for channel in ("stable", "beta"):
         path = args.root / f"version/{channel}.json"
         data = load(path)
-        expected_url = f'https://github.com/84593320z/GKD-XAP/releases/download/{manifest["tag"]}/{manifest["asset"]}'
+        expected_url = f'https://github.com/10268697/GKD-XAP/releases/download/{manifest["tag"]}/{manifest["asset"]}'
         if (data["versionCode"], data["versionName"], data["downloadUrl"]) != (manifest["versionCode"], manifest["versionName"], expected_url):
             print(f"Skip {channel}: main has advanced to another version")
             continue

@@ -77,8 +77,8 @@
 
 | 项目 | 说明 |
 | ---- | ---- |
-| 本仓库 | [84593320z/GKD-XAP](https://github.com/84593320z/GKD-XAP) |
-| 前身 | [84593320z/GKD-XA](https://github.com/84593320z/GKD-XA)（同作者，包名 `li.songe.gkdx`，已停止更新） |
+| 本仓库 | [10268697/GKD-XAP](https://github.com/10268697/GKD-XAP) |
+| 前身 | [84593320z/GKD-XA](https://github.com/84593320z/GKD-XA)（作者旧账号下的仓库，包名 `li.songe.gkdx`，已停止更新） |
 | 直接来源 | [hanchuan8/gkd-miuix](https://github.com/hanchuan8/gkd-miuix)（本融合版在其基础上开发） |
 | 上游 | [gkd-kit/gkd](https://github.com/gkd-kit/gkd) |
 | AI 生成规则 | 移植自 [fjjzy/gkd-plus](https://github.com/fjjzy/gkd-plus)（GPL-3.0） |
@@ -87,7 +87,7 @@
 
 ## 安装
 
-从本仓库 [Releases](https://github.com/84593320z/GKD-XAP/releases) 下载安装包。
+从本仓库 [Releases](https://github.com/10268697/GKD-XAP/releases) 下载安装包。
 
 构建需要 JDK 21 与 Android SDK 37，Gradle wrapper 使用仓库固定版本。发布包需配置固定签名；日常验证可用 `assembleGkdPerf`。升级前请导出备份，Android 不保证能覆盖安装较低版本，v1.5.2 私有目录也不由旧版直接读取。
 
@@ -167,4 +167,4 @@ benchmark/build/outputs/connected_android_test_additional_output/gkdNonMinifiedP
 
 问题与建议请提交到本仓库 Issues：
 
-<https://github.com/84593320z/GKD-XA/issues>
+<https://github.com/10268697/GKD-XAP/issues>

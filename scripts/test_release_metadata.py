@@ -19,7 +19,7 @@ class ReleaseMetadataTest(unittest.TestCase):
         (self.root / "gkd-app/build.gradle.kts").write_text('versionCode = 153; versionName = "1.5.2"', encoding="utf-8")
         (self.root / "CHANGELOG.md").write_text("## v1.5.2（2026-11-16）\nRelease\n\n## v1.5.1（2026-11-12）\nPrevious\n", encoding="utf-8")
         data = dict(versionCode=153, versionName="1.5.2", changelog="v1.5.2", fileSize=0,
-                    downloadUrl="https://github.com/84593320z/GKD-XAP/releases/download/v1.5.2/GKD-XAP-v1.5.2.apk",
+                    downloadUrl="https://github.com/10268697/GKD-XAP/releases/download/v1.5.2/GKD-XAP-v1.5.2.apk",
                     versionLogs=[dict(code=153, name="1.5.2")])
         for channel in ("stable", "beta"):
             release.save(self.root / f"version/{channel}.json", data)
