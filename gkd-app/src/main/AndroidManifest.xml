@@ -39,6 +39,12 @@
         android:supportsRtl="false"
         android:theme="@style/AppTheme">
 
+        <!-- Lets the Baseline Profile generator drive this build over adb. Harmless in shipping
+             builds: it only exposes ART sampling data, and only for an attached shell. -->
+        <profileable
+            android:shell="true"
+            tools:targetApi="29" />
+
         <meta-data
             android:name="channel"
             android:value="${channel}" />

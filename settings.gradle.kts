@@ -19,6 +19,7 @@ plugins {
 
 rootProject.name = "gkd-x"
 include(
+    ":benchmark",
     ":gkd-aidl",
     ":gkd-app",
     ":gkd-db",

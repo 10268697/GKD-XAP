@@ -22,6 +22,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.remap)
     alias(libs.plugins.codeorigin)
+    alias(libs.plugins.androidx.baselineprofile)
 }
 
 android {
@@ -326,4 +327,13 @@ dependencies {
     implementation(libs.kevinnzouWebview) {
         exclude(group = "com.google.android.material", module = "material")
     }
+
+    // Wires the benchmark module in as the generator for this module's baseline profile.
+    baselineProfile(project(":benchmark"))
+}
+
+baselineProfile {
+    // Write the generated rules to src/main so they end up next to the hand-written ones instead
+    // of only inside build/, which is what actually ships in the apk.
+    saveInSrc = true
 }
