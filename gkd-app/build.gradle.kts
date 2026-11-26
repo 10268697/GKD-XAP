@@ -27,7 +27,7 @@ plugins {
 android {
     namespace = "li.gkd.app"
     defaultConfig {
-        applicationId = "li.songe.gkdx"
+        applicationId = "li.songe.gkdxap"
         versionCode = 155
         versionName = "1.5.4"
 
@@ -116,7 +116,7 @@ android {
                 "proguard-rules.pro",
             )
             resValue("color", "better_black", "#FF5D92")
-            resValue("string", "app_name", "GKD-XA-perf")
+            resValue("string", "app_name", "GKD-XAP-perf")
         }
         debug {
             signingConfig = gkdSigningConfig
@@ -222,7 +222,7 @@ if (buildProperty("GKD_RENAME_APK_FLAG").isPresent) {
     androidComponents.onVariants { variant ->
         variant.outputs.onEach { output ->
             output as VariantOutputImpl
-            output.outputFileName = "GKD-XA-v${output.versionName.get()}.apk"
+            output.outputFileName = "GKD-XAP-v${output.versionName.get()}.apk"
         }
     }
 }

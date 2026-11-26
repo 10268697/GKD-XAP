@@ -4,7 +4,7 @@
 
 通过自定义规则，在指定界面满足条件（如屏幕存在特定文字）时，点击节点、位置或执行其他操作。
 
-- **应用**：GKD-XA（`li.songe.gkdx`）
+- **应用**：GKD-XAP（`li.songe.gkdxap`）
 - **界面**：MIUIX（顶栏 / 底栏 / 设置分组 / 对话框 / 图标等）
 - **能力**：上游 GKD 的选择器、订阅规则、快照与自动化能力，并融合 AI 生成规则
 
@@ -101,9 +101,9 @@
 
 | 类型 | 包名 | 说明 |
 | ---- | ---- | ---- |
-| `debug` | `li.songe.gkdx.debug` | 调试版，应用名带 `Debug` 后缀 |
-| `perf` | `li.songe.gkdx` | 性能实测版：启用 R8 优化与资源压缩、`isDebuggable=false`；签名使用当前 GKD 签名配置 |
-| `release` | `li.songe.gkdx` | 发布版，开启 R8 混淆与资源压缩 |
+| `debug` | `li.songe.gkdxap.debug` | 调试版，应用名带 `Debug` 后缀 |
+| `perf` | `li.songe.gkdxap.perf` | 性能实测版：启用 R8 优化与资源压缩、`isDebuggable=false`；可与 `release` 并存 |
+| `release` | `li.songe.gkdxap` | 发布版，开启 R8 混淆与资源压缩 |
 
 日常测试建议用 `perf`：
 

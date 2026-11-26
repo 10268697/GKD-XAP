@@ -74,7 +74,7 @@ def package(args):
     apk = args.apk.resolve()
     badging = subprocess.check_output([sdk_tool("aapt2", args.aapt2), "dump", "badging", str(apk)], text=True, encoding="utf-8")
     match = re.search(r"package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'", badging)
-    if not match or match.groups() != ("li.songe.gkdx", str(code), name):
+    if not match or match.groups() != ("li.songe.gkdxap", str(code), name):
         raise ValueError("Built APK package/version differs from the tagged release")
     certificates = subprocess.check_output(
         [sdk_tool("apksigner"), "verify", "--print-certs", str(apk)], text=True, encoding="utf-8")
@@ -88,14 +88,14 @@ def package(args):
         raise ValueError("Unexpected APK size")
     out = args.output_dir.resolve()
     out.mkdir(parents=True, exist_ok=True)
-    asset_name = f"GKD-XA-{args.tag}.apk"
+    asset_name = f"GKD-XAP-{args.tag}.apk"
     shutil.copyfile(apk, out / asset_name)
     for channel in ("stable", "beta"):
         data = load(ROOT / f"version/{channel}.json")
         data.update(fileSize=size, sha256=digest)
         save(out / f"{channel}.json", data)
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-    save(out / "release-manifest.json", {"tag": args.tag, "commit": commit, "package": "li.songe.gkdx", "versionCode": code, "versionName": name, "fileSize": size, "sha256": digest, "signerSha256": RELEASE_SIGNER_SHA256, "asset": asset_name})
+    save(out / "release-manifest.json", {"tag": args.tag, "commit": commit, "package": "li.songe.gkdxap", "versionCode": code, "versionName": name, "fileSize": size, "sha256": digest, "signerSha256": RELEASE_SIGNER_SHA256, "asset": asset_name})
     (out / "SHA256SUMS").write_text(f"{digest}  {asset_name}\n", encoding="ascii")
     text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     sections = re.split(r"(?=^## )", text, flags=re.M)
