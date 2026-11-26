@@ -111,6 +111,28 @@
 ./gradlew :gkd-app:assembleGkdPerf
 ```
 
+## Baseline Profile
+
+`gkd-app/src/main/baseline-prof.txt` 里是真实录制出来的启动路径，覆盖冷启动、首屏与应用列表页。
+它和依赖库自带的 profile 由 AGP 在打包时合并，R8 再按 mapping 重写成本构建的混淆名。
+
+重新录制（需要一台 API 28+ 且 `adb root` 可用的设备，或任意 API 33+ 设备）：
+
+```bash
+adb root
+./gradlew :benchmark:connectedGkdNonMinifiedPerfAndroidTest
+```
+
+必须用 `NonMinified` 变体：混淆过的那版采出来是 `La0;` 这类重命名后的规则，R8 无法再反向映射。
+录制结果会落在：
+
+```
+benchmark/build/outputs/connected_android_test_additional_output/gkdNonMinifiedPerf/connected/<设备>/BaselineProfileGenerator_startupProfile-startup-prof.txt
+```
+
+把它复制成 `gkd-app/src/main/baseline-prof.txt` 即可。录制脚本在
+`benchmark/src/main/kotlin/li/gkd/benchmark/BaselineProfileGenerator.kt`，改页面路径就改那里。
+
 ## 开源致谢
 
 本项目在 [GKD](https://github.com/gkd-kit/gkd)（GPL-3.0）与 [hanchuan8/gkd-miuix](https://github.com/hanchuan8/gkd-miuix)（GPL-3.0）基础上开发，并使用了下列开源项目（不完全列表）：
