@@ -19,7 +19,12 @@ import android.widget.Toast
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.toColorInt
+import com.hjq.toast.ActivityToast
+import com.hjq.toast.SystemToast
+import com.hjq.toast.ToastParams
+import com.hjq.toast.ToastStrategy
 import com.hjq.toast.Toaster
+import com.hjq.toast.config.IToast
 import com.hjq.toast.style.WhiteToastStyle
 import li.gkd.app.notif.ActionTipNotif
 import li.gkd.app.text.UiStrings
@@ -233,6 +238,26 @@ object ToastUtils {
         Toaster.init(app)
         Toaster.setDebugMode(false)
         Toaster.setInterceptor { false } // 覆盖默认拦截器
+        setToastStrategy()
         setReactiveToastStyle()
+    }
+
+    /**
+     * Toaster 的默认策略会在「已授予悬浮窗权限」时选中 GlobalToast —— 它用 Application 的
+     * WindowManager 直接挂一个 TYPE_APPLICATION_OVERLAY 窗口来画 toast，系统随之弹出
+     * 「正在其他应用的上层显示」。
+     *
+     * GKD 自己已经有无障碍与悬浮窗两套提示体系，不需要第三方库再开一个应用级窗口；
+     * 而且这个分支只取决于系统里是否给过悬浮窗权限，会出现「同一个 App 换包名后
+     * toast 样式突然变了、还多一条系统提示」这种诡异差异。固定走 ActivityToast
+     * （画在 Activity 上）或 SystemToast（系统渲染），两者都不占用悬浮窗权限。
+     */
+    private fun setToastStrategy() {
+        Toaster.setStrategy(object : ToastStrategy(app) {
+            override fun createToast(params: ToastParams): IToast {
+                val activity = toastActivity
+                return if (activity != null) ActivityToast(activity) else SystemToast(app)
+            }
+        })
     }
 }
