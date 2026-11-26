@@ -115,7 +115,7 @@ sealed class UpdateChannelOption(
     data object Stable : UpdateChannelOption(
         0,
         UiStrings.update_channel_stable,
-        "https://api.github.com/repos/84593320z/GKD-XA/releases/latest"
+        "https://api.github.com/repos/84593320z/GKD-XAP/releases/latest"
     )
 
     // 不能也写成 releases/latest：GitHub 的 latest 按定义排除 prerelease，测试通道会和稳定通道
@@ -128,7 +128,7 @@ sealed class UpdateChannelOption(
     data object Beta : UpdateChannelOption(
         1,
         UiStrings.update_channel_beta,
-        "https://raw.githubusercontent.com/84593320z/GKD-XA/main/version/beta.json"
+        "https://raw.githubusercontent.com/84593320z/GKD-XAP/main/version/beta.json"
     )
 
     companion object {

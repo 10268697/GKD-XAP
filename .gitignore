@@ -24,3 +24,7 @@ local.properties
 /.kotlin
 
 /gradle/libs.versions.updates.toml
+
+# 发布流水线本地留档，不入库
+ci_release.apk
+/release/

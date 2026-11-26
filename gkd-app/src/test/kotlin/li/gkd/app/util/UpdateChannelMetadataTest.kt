@@ -53,8 +53,8 @@ class UpdateChannelMetadataTest {
 
             assertTrue("$name.json downloadUrl 与 versionName 不是同一个 tag",
                 version.downloadUrl.contains("/releases/download/$tag/"))
-            assertTrue("$name.json downloadUrl 附件名不符合 GKD-XA-<tag>.apk",
-                version.downloadUrl.endsWith("GKD-XA-$tag.apk"))
+            assertTrue("$name.json downloadUrl 附件名不符合 GKD-XAP-<tag>.apk",
+                version.downloadUrl.endsWith("GKD-XAP-$tag.apk"))
 
             // 真正的「改了一个忘另一个」是 JSON 与 build.gradle.kts 不一致：
             // JSON 里的 versionCode 必须等于 META.versionCode（gradle 手工 bump 的那个数），

@@ -10,7 +10,7 @@ class UpdateApkMetadataTest {
     @Test fun githubTagsNeverInventAndroidVersionCode() {
         val release = GitHubRelease(
             tagName = "v1.5.2", body = "changes",
-            assets = listOf(GitHubReleaseAsset("GKD-XA-v1.5.2.apk", 123, "https://example.invalid/update.apk")),
+            assets = listOf(GitHubReleaseAsset("GKD-XAP-v1.5.2.apk", 123, "https://example.invalid/update.apk")),
         ).toNewVersion()
         assertNull(release.versionCode)
         assertEquals("1.5.2", release.versionName)

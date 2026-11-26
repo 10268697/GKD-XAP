@@ -37,7 +37,7 @@ def validate(root, tag=None):
         data = load(root / f"version/{channel}.json")
         if (data["versionCode"], data["versionName"]) != (code, name):
             raise ValueError(f"{channel}: identity mismatch")
-        expected_url = f"https://github.com/84593320z/GKD-XA/releases/download/{expected_tag}/GKD-XA-{expected_tag}.apk"
+        expected_url = f"https://github.com/84593320z/GKD-XAP/releases/download/{expected_tag}/GKD-XAP-{expected_tag}.apk"
         if data["downloadUrl"] != expected_url:
             raise ValueError(f"{channel}: artifact URL mismatch")
         size, digest = data["fileSize"], data.get("sha256")
@@ -109,7 +109,7 @@ def backfill(args):
     for channel in ("stable", "beta"):
         path = args.root / f"version/{channel}.json"
         data = load(path)
-        expected_url = f'https://github.com/84593320z/GKD-XA/releases/download/{manifest["tag"]}/{manifest["asset"]}'
+        expected_url = f'https://github.com/84593320z/GKD-XAP/releases/download/{manifest["tag"]}/{manifest["asset"]}'
         if (data["versionCode"], data["versionName"], data["downloadUrl"]) != (manifest["versionCode"], manifest["versionName"], expected_url):
             print(f"Skip {channel}: main has advanced to another version")
             continue

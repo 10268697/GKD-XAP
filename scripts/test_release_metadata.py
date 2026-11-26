@@ -19,14 +19,14 @@ class ReleaseMetadataTest(unittest.TestCase):
         (self.root / "gkd-app/build.gradle.kts").write_text('versionCode = 153; versionName = "1.5.2"', encoding="utf-8")
         (self.root / "CHANGELOG.md").write_text("## v1.5.2（2026-11-16）\nRelease\n\n## v1.5.1（2026-11-12）\nPrevious\n", encoding="utf-8")
         data = dict(versionCode=153, versionName="1.5.2", changelog="v1.5.2", fileSize=0,
-                    downloadUrl="https://github.com/84593320z/GKD-XA/releases/download/v1.5.2/GKD-XA-v1.5.2.apk",
+                    downloadUrl="https://github.com/84593320z/GKD-XAP/releases/download/v1.5.2/GKD-XAP-v1.5.2.apk",
                     versionLogs=[dict(code=153, name="1.5.2")])
         for channel in ("stable", "beta"):
             release.save(self.root / f"version/{channel}.json", data)
         self.apk = self.root / "input.apk"
         self.apk.write_bytes(b"x" * 1_000_001)
         self.args = argparse.Namespace(tag="v1.5.2", apk=self.apk, output_dir=self.root / "release", aapt2=None)
-        self.badging = "package: name='li.songe.gkdx' versionCode='153' versionName='1.5.2'"
+        self.badging = "package: name='li.songe.gkdxap' versionCode='153' versionName='1.5.2'"
         self.signers = [release.RELEASE_SIGNER_SHA256]
 
     def pack(self):
@@ -64,7 +64,7 @@ class ReleaseMetadataTest(unittest.TestCase):
             self.assertFalse(self.args.output_dir.exists())
 
     def test_rejects_apk_package_or_version_mismatch(self):
-        for old, new in (("li.songe.gkdx", "other.package"), ("153", "152"), ("1.5.2", "1.5.1")):
+        for old, new in (("li.songe.gkdxap", "other.package"), ("153", "152"), ("1.5.2", "1.5.1")):
             saved = self.badging
             self.badging = saved.replace(old, new)
             with self.subTest(field=old), self.assertRaises(ValueError):

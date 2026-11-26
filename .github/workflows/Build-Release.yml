@@ -97,9 +97,9 @@ jobs:
           if gh release view "$TAG" --json isDraft > "$RUNNER_TEMP/release-state.json" 2>/dev/null; then
             python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))["isDraft"] else "Release already published; assets will not be overwritten")' "$RUNNER_TEMP/release-state.json"
           else
-            gh release create "$TAG" --verify-tag --draft --title "GKD-XA $TAG" --notes-file release/RELEASE_NOTES.md
+            gh release create "$TAG" --verify-tag --draft --title "GKD-XAP $TAG" --notes-file release/RELEASE_NOTES.md
           fi
-          gh release upload "$TAG" "release/GKD-XA-$TAG.apk" release/SHA256SUMS release/release-manifest.json release/stable.json release/beta.json --clobber
+          gh release upload "$TAG" "release/GKD-XAP-$TAG.apk" release/SHA256SUMS release/release-manifest.json release/stable.json release/beta.json --clobber
           if [[ "$TAG" == *beta* ]]; then
             gh release edit "$TAG" --draft=false --prerelease
           else
