@@ -22,6 +22,7 @@ import li.gkd.app.data.ActionPerformer
 import li.gkd.app.data.AppRule
 import li.gkd.app.data.ResolvedRule
 import li.gkd.app.data.RuleStatus
+import li.gkd.app.data.settings.ScanBoost
 import li.gkd.app.platform.lifecycle.MainActivityVisibility
 import li.gkd.app.service.EventService
 import li.gkd.app.service.topAppIdFlow
@@ -134,7 +135,48 @@ class A11yRuleEngine(private val service: A11yCommonImpl) {
                 }
             }
         }
+        scope.launchLogged(actionDispatcher) {
+            topActivityFlow.collect { restartScanBoost() }
+        }
     }
+
+    private var scanBoostJob: Job? = null
+
+    /**
+     * 应用/活动切换后在配置的窗口内按固定间隔主动补扫。
+     *
+     * 事件驱动覆盖不到的情况真实存在：开屏广告往往在启动过渡之后才渲染，全程不发
+     * content/state 事件，只靠事件会整场错过。补扫只在这个短窗口内做，到点立即停止,
+     * 之后完全回到事件驱动 —— 常驻轮询的耗电与误触代价都不值得。
+     */
+    private fun restartScanBoost() {
+        scanBoostJob?.cancel()
+        scanBoostJob = null
+        val store = storeFlow.value
+        if (!store.scanBoostEnabled) return
+        val window = store.scanBoostWindowMillis.toLong()
+            .coerceIn(ScanBoost.MIN_WINDOW_MILLIS.toLong(), ScanBoost.MAX_WINDOW_MILLIS.toLong())
+        val interval = store.scanBoostIntervalMillis.toLong()
+            .coerceIn(ScanBoost.MIN_INTERVAL_MILLIS.toLong(), ScanBoost.MAX_INTERVAL_MILLIS.toLong())
+        if (window <= 0L || interval <= 0L) return
+        scanBoostJob = scope.launchLogged(actionDispatcher) {
+            if (META.debuggable) {
+                Log.d(
+                    "A11yRuleEngine",
+                    "scanBoost: window=${window}ms interval=${interval}ms app=${activityRuleFlow.value.topActivity.appId}"
+                )
+            }
+            val deadline = ruleNow() + window
+            while (effective && ruleNow() < deadline) {
+                delay(interval.milliseconds)
+                // 屏幕关闭、自身在前台、当前场景没有规则时都没必要读窗口
+                if (!effective || !isInteractive || MainActivityVisibility.isVisible) break
+                if (activityRuleFlow.value.currentRules.isEmpty()) continue
+                startQueryJob()
+            }
+        }
+    }
+
     fun onA11yEvent(event: AccessibilityEvent?) {
         if (!effective) return
         if (!event.isUseful()) return

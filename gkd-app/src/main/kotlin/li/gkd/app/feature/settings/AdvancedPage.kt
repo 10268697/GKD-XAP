@@ -37,6 +37,7 @@ import li.gkd.app.service.ExposeService
 import li.gkd.app.service.ExternalCallTokens
 import li.gkd.app.service.HttpService
 import li.gkd.app.service.TrackService
+import li.gkd.app.data.settings.ScanBoost
 import li.gkd.app.store.AppStore.storeFlow
 import li.gkd.app.text.UiStrings
 import li.gkd.app.ui.component.GkIcons
@@ -84,6 +85,8 @@ private fun AdvancedContent() {
     var showEditPortDialog by rememberSaveable { mutableStateOf(false) }
     var showHttpSettingsDialog by rememberSaveable { mutableStateOf(false) }
     var showExternalCallDialog by rememberSaveable { mutableStateOf(false) }
+    var showEditScanWindowDialog by rememberSaveable { mutableStateOf(false) }
+    var showEditScanIntervalDialog by rememberSaveable { mutableStateOf(false) }
     val store by storeFlow.collectAsStateWithLifecycle()
     val httpServer by HttpService.httpServerFlow.collectAsStateWithLifecycle()
     val localNetworkIps by HttpService.localNetworkIpsFlow.collectAsStateWithLifecycle()
@@ -107,6 +110,28 @@ private fun AdvancedContent() {
 
     if (showExternalCallDialog) {
         ExternalCallCommandDialog { showExternalCallDialog = false }
+    }
+
+    if (showEditScanWindowDialog) {
+        EditNumberDialog(
+            title = "窗口时长（秒）",
+            current = (store.scanBoostWindowMillis / 1000).toString(),
+            hint = "1–20",
+            maxLength = 2,
+            onDismissRequest = { showEditScanWindowDialog = false },
+            onConfirm = { if (vm.saveScanBoostWindowSeconds(it)) showEditScanWindowDialog = false },
+        )
+    }
+
+    if (showEditScanIntervalDialog) {
+        EditNumberDialog(
+            title = "扫描间隔（毫秒）",
+            current = store.scanBoostIntervalMillis.toString(),
+            hint = "${ScanBoost.MIN_INTERVAL_MILLIS}–${ScanBoost.MAX_INTERVAL_MILLIS}",
+            maxLength = 4,
+            onDismissRequest = { showEditScanIntervalDialog = false },
+            onConfirm = { if (vm.saveScanBoostIntervalMs(it)) showEditScanIntervalDialog = false },
+        )
     }
 
     GkPageScaffold(
@@ -286,6 +311,32 @@ private fun AdvancedContent() {
                         }
                     },
                 )
+            }
+
+            PreferenceGroup(title = "扫描频率（实验）") {
+                TextSwitch(
+                    title = "启动窗口内主动扫描",
+                    subtitle = "应用或页面切换后的一小段时间内主动查询界面。开屏广告常在过渡动画后才渲染且不发无障碍事件，" +
+                        "只靠事件驱动会整场错过；窗口结束立即停止，之后回到事件驱动。默认关闭",
+                    checked = store.scanBoostEnabled,
+                    onCheckedChange = vm::setScanBoostEnabled,
+                )
+                if (store.scanBoostEnabled) {
+                    SettingItem(
+                        title = "窗口时长",
+                        subtitle = "${store.scanBoostWindowMillis / 1000} 秒",
+                        imageVector = GkIcons.Edit,
+                        onClickLabel = "修改窗口时长",
+                        onClick = { showEditScanWindowDialog = true },
+                    )
+                    SettingItem(
+                        title = "扫描间隔",
+                        subtitle = "${store.scanBoostIntervalMillis} 毫秒",
+                        imageVector = GkIcons.Edit,
+                        onClickLabel = "修改扫描间隔",
+                        onClick = { showEditScanIntervalDialog = true },
+                    )
+                }
             }
 
             PreferenceGroup(title = "日志与工具") {
@@ -490,3 +541,50 @@ private fun ExternalCallCommandDialog(onDismissRequest: () -> Unit) {
 
 // 随机 token 的头尾泄露代价相同，所以只留 3 位做识别用，剩下 13 位（约 78bit）不外露。
 private fun String.maskedToken(): String = take(3) + "……"
+
+/** 纯数字输入弹窗，范围校验交给调用方的 save 函数，失败时弹窗不关闭。 */
+@Composable
+private fun EditNumberDialog(
+    title: String,
+    current: String,
+    hint: String,
+    maxLength: Int,
+    onDismissRequest: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var value by rememberSaveable(current) { mutableStateOf(current) }
+    PerfAlertDialog(
+        properties = DialogProperties(dismissOnClickOutside = false),
+        title = { Text(text = title) },
+        text = {
+            TextField(
+                value = value,
+                onValueChange = { value = it.filter(Char::isDigit).take(maxLength) },
+                label = hint,
+                useLabelAsPlaceholder = true,
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .autoFocus(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+        },
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(
+                text = UiStrings.action_confirm,
+                enabled = value.isNotEmpty(),
+                onClick = { onConfirm(value) },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColorsPrimary(),
+            )
+        },
+        dismissButton = {
+            TextButton(
+                text = UiStrings.action_cancel,
+                onClick = onDismissRequest,
+                modifier = Modifier.weight(1f),
+            )
+        },
+    )
+}
