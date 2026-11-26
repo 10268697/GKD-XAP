@@ -1,0 +1,8 @@
+HSPLli/gkd/app/App;->attachBaseContext(Landroid/content/Context;)V
+HSPLli/gkd/app/App;->onCreate()V
+HSPLli/gkd/app/MainActivity;-><init>()V
+HSPLli/gkd/app/MainActivity;->onCreate(Landroid/os/Bundle;)V
+Lli/gkd/app/App;
+Lli/gkd/app/MainActivity;
+Lli/gkd/app/MainViewModel;
+Lli/gkd/app/store/AppStore;
