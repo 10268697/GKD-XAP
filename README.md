@@ -79,7 +79,7 @@
 | 项目 | 说明 |
 | ---- | ---- |
 | 本仓库 | [10268697/GKD-XAP](https://github.com/10268697/GKD-XAP) |
-| 前身 | [84593320z/GKD-XA](https://github.com/84593320z/GKD-XA)（作者旧账号下的仓库，包名 `li.songe.gkdx`，已停止更新） |
+| 上游 | [84593320z/GKD-XA](https://github.com/84593320z/GKD-XA)（包名 `li.songe.gkdx`） |
 | 直接来源 | [hanchuan8/gkd-miuix](https://github.com/hanchuan8/gkd-miuix)（本融合版在其基础上开发） |
 | 上游 | [gkd-kit/gkd](https://github.com/gkd-kit/gkd) |
 | AI 生成规则 | 移植自 [fjjzy/gkd-plus](https://github.com/fjjzy/gkd-plus)（GPL-3.0） |
