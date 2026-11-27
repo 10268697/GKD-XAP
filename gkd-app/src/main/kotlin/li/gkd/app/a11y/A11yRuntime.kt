@@ -16,6 +16,7 @@ import li.gkd.app.data.RpcError
 import li.gkd.app.priv.privilegeContextFlow
 import li.gkd.app.priv.uiAutomationFlow
 import li.gkd.app.service.A11yService
+import li.gkd.app.util.AndroidTarget
 import li.gkd.app.util.AutomatorModeOption
 import li.gkd.app.util.runMainPost
 import li.gkd.selector.MatchOptions
@@ -75,6 +76,20 @@ object A11yRuntime {
         val result = privilegeContextFlow.value?.keyevent(KeyEvent.KEYCODE_BACK)
         if (result == true) return true
         return A11yService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK) == true
+    }
+
+    /**
+     * 收起通知栏 / 快捷控制栏。
+     *
+     * 返回键在部分 ROM（ColorOS 17）上收不起控制栏，所以 Android 12+ 优先用系统的收起动作；
+     * 无障碍链路不可用（自动化模式）时退回返回键，与改动前行为一致。
+     */
+    fun performActionCollapseShade(): Boolean {
+        if (AndroidTarget.S) {
+            val action = AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE
+            if (A11yService.instance?.performGlobalAction(action) == true) return true
+        }
+        return performActionBack()
     }
 
     suspend fun screenshot(): Bitmap? = service?.screenshot()

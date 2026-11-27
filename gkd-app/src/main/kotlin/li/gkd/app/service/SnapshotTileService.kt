@@ -24,7 +24,7 @@ private fun execSnapshot() {
     LogUtils.d("SnapshotTileService::onClick")
     val service = A11yRuntime.service
     if (service == null) {
-        A11yRuntime.performActionBack()
+        A11yRuntime.performActionCollapseShade()
         toast(UiStrings.service_not_connected, forced = true)
         return
     }
@@ -32,7 +32,7 @@ private fun execSnapshot() {
         val oldAppId = A11yRuntime.getRoot(service)?.packageName?.toString()
 
         if (oldAppId == null) {
-            A11yRuntime.performActionBack()
+            A11yRuntime.performActionCollapseShade()
             toast(UiStrings.snapshot_root_node_failed, forced = true)
             return@launchUi
         }
@@ -62,7 +62,7 @@ private fun execSnapshot() {
                 )
                 break
             } else {
-                A11yRuntime.performActionBack()
+                A11yRuntime.performActionCollapseShade()
                 delay(500)
                 if (timeout()) {
                     toast(UiStrings.snapshot_activity_switch_missing, forced = true)
@@ -71,7 +71,7 @@ private fun execSnapshot() {
             }
         }
         if (!ok) {
-            A11yRuntime.performActionBack()
+            A11yRuntime.performActionCollapseShade()
         }
     }
 }
