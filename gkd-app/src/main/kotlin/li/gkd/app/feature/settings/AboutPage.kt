@@ -142,13 +142,6 @@ fun AboutPage() {
                         title = "开源代码",
                         onClick = { mainVm.openUrl(REPOSITORY_URL) },
                     )
-                    if (META.isGkdChannel) {
-                        GkSettingItem(
-                            imageVector = null,
-                            title = "捐赠支持",
-                            onClick = { mainVm.navigateWebPage(ShortUrlSet.URL10) },
-                        )
-                    }
                     GkSettingItem(
                         imageVector = null,
                         title = "使用协议",

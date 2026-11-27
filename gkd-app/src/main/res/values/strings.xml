@@ -304,7 +304,6 @@
     <string name="disabled">已禁用</string>
     <string name="documentation_description">查阅规则文档和常见问题</string>
     <string name="documentation_open">打开 GKD 文档页面</string>
-    <string name="donate">捐赠支持</string>
     <string name="download_abort">终止下载</string>
     <string name="download_complete">下载完毕</string>
     <string name="download_directory_create_failed">创建下载目录失败</string>
