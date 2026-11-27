@@ -335,6 +335,16 @@
             </intent-filter>
         </receiver>
 
+        <!-- 直接写回 secure settings，开机时不需要特权服务在线；与上面的应用内同步互补。 -->
+        <receiver
+            android:name="li.gkd.app.receiver.BootRestoreReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>
