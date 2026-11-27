@@ -3,39 +3,37 @@ package li.gkd.app.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import li.gkd.app.text.UiStrings
 import li.gkd.app.ui.component.GkActionButton
 import li.gkd.app.ui.component.GkAlertDialog
 import li.gkd.app.ui.component.GkFormTextField
-import li.gkd.app.ui.component.GkTextSwitch
 import li.gkd.app.ui.style.GkUi
 import li.gkd.app.util.TimeUtils.throttle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 简易规则输入与规则编辑器共用表单标签和操作按钮，保留原有提交与示例行为。
- * 来源：gkd-plus 7e9a38e 的 SimpleRuleDialog。
+ * 简易规则输入：一个定位弹窗的条件，一个关闭弹窗的方式。
+ *
+ * 写法与李跳跳一致（`+` 开头、`-` 结尾、`=` 完全相同、`&` 多条件），转换逻辑在
+ * [li.gkd.app.util.simpleRuleSelector] / [li.gkd.app.util.buildSimpleRuleMatches]。
+ * 关闭方式留空表示按返回键，与旧版「通过返回键关闭」开关等价。
  */
 @Composable
 fun SimpleRuleDialog(
     onDismissRequest: () -> Unit,
-    onSubmit: (text: String, id: String, backToClose: Boolean) -> Unit,
+    onSubmit: (locator: String, closeLocator: String) -> Unit,
 ) {
-    var textValue by remember { mutableStateOf("") }
-    var idValue by remember { mutableStateOf("") }
-    var backToClose by remember { mutableStateOf(false) }
+    var locatorValue by remember { mutableStateOf("") }
+    var closeValue by remember { mutableStateOf("") }
     var showExample by remember { mutableStateOf(false) }
 
     GkAlertDialog(
@@ -48,27 +46,23 @@ fun SimpleRuleDialog(
                 verticalArrangement = Arrangement.spacedBy(GkUi.SectionGap),
             ) {
                 GkFormTextField(
-                    value = textValue,
-                    onValueChange = { textValue = it },
+                    value = locatorValue,
+                    onValueChange = { locatorValue = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = UiStrings.simple_rule_text_label,
+                    label = UiStrings.simple_rule_locator_label,
                     singleLine = true,
                 )
                 GkFormTextField(
-                    value = idValue,
-                    onValueChange = { idValue = it },
+                    value = closeValue,
+                    onValueChange = { closeValue = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = UiStrings.simple_rule_id_label,
+                    label = UiStrings.simple_rule_close_label,
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                 )
-                GkTextSwitch(
-                    modifier = Modifier.fillMaxWidth().heightIn(min = GkUi.MinTouchTarget),
-                    paddingDisabled = true,
-                    title = UiStrings.simple_rule_back_close,
-                    subtitle = UiStrings.simple_rule_back_close_desc,
-                    checked = backToClose,
-                    onCheckedChange = { backToClose = it },
+                Text(
+                    text = UiStrings.simple_rule_close_desc,
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 )
                 if (showExample) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -89,8 +83,8 @@ fun SimpleRuleDialog(
         confirmButton = {
             GkActionButton(
                 emphasized = true,
-                enabled = textValue.isNotBlank() || idValue.isNotBlank(),
-                onClick = throttle { onSubmit(textValue, idValue, backToClose) },
+                enabled = locatorValue.isNotBlank() || closeValue.isNotBlank(),
+                onClick = throttle { onSubmit(locatorValue, closeValue) },
             ) { Text(UiStrings.simple_rule_add) }
         },
         dismissButton = {

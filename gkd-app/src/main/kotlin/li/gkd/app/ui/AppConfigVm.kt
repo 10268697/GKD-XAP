@@ -30,10 +30,14 @@ import li.gkd.app.util.MutexState
 import li.gkd.app.util.RuleSortOption
 import li.gkd.app.util.ToastUtils.toast
 import li.gkd.app.util.toJson5String
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import li.gkd.app.util.buildSimpleRuleMatches
+import li.gkd.app.util.isInvalidSimpleRuleBounds
+import li.gkd.app.util.simpleRuleAction
 import li.gkd.db.ActionLog
 import li.gkd.db.Db
 import li.gkd.db.LOCAL_SUBS_ID
@@ -114,21 +118,21 @@ class AppConfigVm(
      * 返回错误信息；成功时返回 null 并提示。来源：gkd-plus 7e9a38e，按 XA 的
      * SubscriptionRepository + SubscriptionEditor API 改写。
      */
-    suspend fun addSimpleRule(text: String, id: String, backToClose: Boolean): String? {
-        val trimmedId = id.trim()
-        val trimmedText = text.trim()
-        val selector = when {
-            trimmedId.isNotEmpty() -> "[id=\"${escapeSelectorValue(trimmedId)}\"]"
-            trimmedText.isNotEmpty() -> "[text=\"${escapeSelectorValue(trimmedText)}\"]"
-            else -> return UiStrings.simple_rule_input_required
+    suspend fun addSimpleRule(locator: String, closeLocator: String): String? {
+        val dialogText = locator.trim()
+        val closeText = closeLocator.trim()
+        if (isInvalidSimpleRuleBounds(dialogText) || isInvalidSimpleRuleBounds(closeText)) {
+            return UiStrings.simple_rule_bounds_invalid
         }
-        val action = if (backToClose) "back" else "click"
+        val matches = buildSimpleRuleMatches(dialogText, closeText)
+            ?: return UiStrings.simple_rule_input_required
+        val action = simpleRuleAction(closeText)
         val group = runCatching {
             val groupJson = buildJsonObject {
-                put("name", trimmedText.ifEmpty { trimmedId })
+                put("name", dialogText.ifEmpty { closeText })
                 putJsonArray("rules") {
                     addJsonObject {
-                        put("matches", selector)
+                        putJsonArray("matches") { matches.forEach { add(JsonPrimitive(it)) } }
                         put("action", action)
                     }
                 }
@@ -157,9 +161,6 @@ class AppConfigVm(
             it.message ?: UiStrings.simple_rule_input_required
         }
     }
-
-    private fun escapeSelectorValue(value: String): String =
-        value.replace("\\", "\\\\").replace("\"", "\\\"")
 
     suspend fun buildSelectedGroupsText(selectedGroups: Set<RuleGroupTarget>): String =
         withContext(Dispatchers.Default) {

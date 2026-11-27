@@ -472,9 +472,9 @@ fun AppConfigPage(route: AppConfigRoute) {
     if (showSimpleRule) {
         SimpleRuleDialog(
             onDismissRequest = { showSimpleRule = false },
-            onSubmit = { text, id, backToClose ->
+            onSubmit = { locator, closeLocator ->
                 scope.launchUi {
-                    val error = vm.addSimpleRule(text, id, backToClose)
+                    val error = vm.addSimpleRule(locator, closeLocator)
                     if (error == null) {
                         showSimpleRule = false
                     } else {
