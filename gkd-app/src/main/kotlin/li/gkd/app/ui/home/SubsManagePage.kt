@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import li.gkd.app.text.UiStrings
@@ -174,6 +175,7 @@ private fun useLoadedSubsManagePage(
 
     powerWarningItem?.let { item ->
         GkAlertDialog(
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
             title = { Text(text = UiStrings.subscription_battery_warning) },
             text = {
                 Column {

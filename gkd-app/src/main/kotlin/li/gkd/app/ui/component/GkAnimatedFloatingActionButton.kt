@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import li.gkd.app.ui.component.rememberGkVisibilityProgress
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -81,7 +81,7 @@ private fun LiquidGlassFab(
     modifier: Modifier = Modifier,
     onClickLabel: String? = null,
 ) {
-    val store by storeFlow.collectAsState()
+    val store by storeFlow.collectAsStateWithLifecycle()
     val backdrop = LocalLayerBackdrop.current
     val isDark = LocalDarkTheme.current
     val shaderOk = isRuntimeShaderSupported()

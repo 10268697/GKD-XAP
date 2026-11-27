@@ -141,6 +141,12 @@ fun useControlPage(): ScaffoldExt {
         val manageRunning by StatusService.isRunning.collectAsStateWithLifecycle()
         val writeSecureSettings by PermissionStates.writeSecureSettings.stateFlow.collectAsStateWithLifecycle()
         val appOpsRestricted by PermissionStates.appOpsRestrictedFlow.collectAsStateWithLifecycle()
+        val topAppId by topAppIdFlow.collectAsStateWithLifecycle()
+        val a11yServiceEnabled by mainVm.a11yServiceEnabledFlow.collectAsStateWithLifecycle()
+        val a11yPartDisabled by a11yPartDisabledFlow.collectAsStateWithLifecycle()
+        val uiAutomation by uiAutomationFlow.collectAsStateWithLifecycle()
+        val privilegeContext by privilegeContextFlow.collectAsStateWithLifecycle()
+        val activityServiceRunning by ActivityService.isRunning.collectAsStateWithLifecycle()
 
         Column(
             modifier = Modifier
@@ -192,15 +198,15 @@ fun useControlPage(): ScaffoldExt {
             StatusOverviewSection()
 
             PreferenceGroup(title = "服务", showTop = true) {
-                if (store.useA11y || actualA11yScopeAppList.contains(topAppIdFlow.collectAsStateWithLifecycle().value)) {
+                if (store.useA11y || actualA11yScopeAppList.contains(topAppId)) {
                     TextSwitch(
                         title = "无障碍服务",
                         subtitle = if (a11yRunning) {
                             null
-                        } else if (mainVm.a11yServiceEnabledFlow.collectAsStateWithLifecycle().value) {
+                        } else if (a11yServiceEnabled) {
                             "无障碍发生故障"
                         } else if (writeSecureSettings) {
-                            if (store.enableAutomator && a11yPartDisabledFlow.collectAsStateWithLifecycle().value) {
+                            if (store.enableAutomator && a11yPartDisabled) {
                                 "无障碍局部关闭"
                             } else {
                                 "无障碍已关闭"
@@ -218,8 +224,6 @@ fun useControlPage(): ScaffoldExt {
                         },
                     )
                 } else {
-                    val uiAutomation by uiAutomationFlow.collectAsStateWithLifecycle()
-                    val privilegeContext by privilegeContextFlow.collectAsStateWithLifecycle()
                     TextSwitch(
                         title = "自动化服务",
                         subtitle = if (uiAutomation != null) {
@@ -227,7 +231,7 @@ fun useControlPage(): ScaffoldExt {
                         } else if (privilegeContext == null) {
                             "自动化未授权"
                         } else {
-                            if (store.enableAutomator && a11yPartDisabledFlow.collectAsStateWithLifecycle().value) {
+                            if (store.enableAutomator && a11yPartDisabled) {
                                 "自动化局部关闭"
                             } else {
                                 "自动化已关闭"
@@ -268,7 +272,7 @@ fun useControlPage(): ScaffoldExt {
                     },
                 )
 
-                if (ActivityService.isRunning.collectAsStateWithLifecycle().value) {
+                if (activityServiceRunning) {
                     SettingItem(
                         title = "界面日志",
                         subtitle = "记录打开的应用及界面",
@@ -303,6 +307,8 @@ private fun StatusOverviewSection() {
     val a11yRunning by A11yService.isRunning.collectAsStateWithLifecycle()
     val writeSecureSettings by PermissionStates.writeSecureSettings.stateFlow.collectAsStateWithLifecycle()
     val appOpsRestricted by PermissionStates.appOpsRestrictedFlow.collectAsStateWithLifecycle()
+    val topAppId by topAppIdFlow.collectAsStateWithLifecycle()
+    val privilegeContext by privilegeContextFlow.collectAsStateWithLifecycle()
     val colorScheme = MiuixTheme.colorScheme
     val subsCount = SubscriptionState.subsItemsFlow.collectAsStateWithLifecycle().value.size
     // 口径必须与「应用」Tab 一致：AppListPage 用 visibleAppInfosFlow 建列表。
@@ -310,7 +316,7 @@ private fun StatusOverviewSection() {
     // size 等于订阅数量，所以「应用」卡片显示的一直是订阅数。
     val appCount = AppInfoRepository.visibleAppInfosFlow.collectAsStateWithLifecycle().value.size
 
-    val useA11y = store.useA11y || actualA11yScopeAppList.contains(topAppIdFlow.collectAsStateWithLifecycle().value)
+    val useA11y = store.useA11y || actualA11yScopeAppList.contains(topAppId)
     val uiAutomation by uiAutomationFlow.collectAsStateWithLifecycle()
     val serviceRunning = if (useA11y) a11yRunning else uiAutomation != null
     val statusColors = StatusColors.serviceStatus(running = serviceRunning)
@@ -320,7 +326,6 @@ private fun StatusOverviewSection() {
     } else if (useA11y) {
         if (writeSecureSettings) "未运行" else "未授权"
     } else {
-        val privilegeContext by privilegeContextFlow.collectAsStateWithLifecycle()
         if (privilegeContext != null) "未运行" else "未授权"
     }
 
