@@ -1,5 +1,5 @@
 # GKD-XAP 融合版
-X:MIUIX   A:AI规则服务  P:PLUS版本
+X:MIUIX     A:AI规则服务     P:PLUS版  
 最初版本来自上游[GKD-XA](https://github.com/84593320z/GKD-XA) 对其完成了修复应用列表点击排序闪退问题，并基于MIUIX 0.95-rc02重构界面。
 而GKD-XA是基于 [GKD](https://github.com/gkd-kit/gkd) 的 Android 自定义屏幕点击应用分支，界面 100% 保留原 MIUIX 风格，底层跟随上游新架构。
 
