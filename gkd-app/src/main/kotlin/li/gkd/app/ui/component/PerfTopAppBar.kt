@@ -2,13 +2,17 @@ package li.gkd.app.ui.component
 
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
+import li.gkd.app.ui.share.LocalGkGlassTopBar
+import li.gkd.app.ui.share.LocalLayerBackdrop
 import li.gkd.app.ui.share.LocalMiuixBlurActive
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.TopAppBarDefaults
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -37,6 +41,32 @@ fun PerfTopAppBar(
         color != Color.Unspecified -> color
         blurActive -> Color.Transparent
         else -> MiuixTheme.colorScheme.surface
+    }
+    // 玻璃顶栏：只在调用方没指定 color、没改文字色、且页面提供了 backdrop 时启用。
+    val glassBar = blurActive &&
+        color == Color.Unspecified &&
+        LocalLayerBackdrop.current != null &&
+        titleColor == MiuixTheme.colorScheme.onSurface &&
+        largeTitleColor == MiuixTheme.colorScheme.onSurface &&
+        subtitleColor == MiuixTheme.colorScheme.onSurfaceVariantSummary
+    if (glassBar) {
+        CompositionLocalProvider(LocalGkGlassTopBar provides true) {
+            GlassTopAppBar(
+                title = titleText,
+                modifier = modifier,
+                // 模糊交给外层 textureBlur（壳层已开），这里只取渐进色带与玻璃按钮材质。
+                expandable = true,
+                backdrop = null,
+                largeTitle = titleText,
+                subtitle = subtitle,
+                scrollBehavior = if (canScroll) miuixScrollBehavior else null,
+                navigationIcon = navigationIcon,
+                actions = actions,
+                bottomContent = bottomContent,
+                defaultWindowInsetsPadding = true,
+            )
+        }
+        return
     }
     TopAppBar(
         title = titleText,

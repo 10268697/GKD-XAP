@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Dialog as PlatformDialog
+import li.gkd.app.ui.share.LocalLayerBackdrop
 import li.gkd.app.ui.style.GkProvideTextStyle
 import li.gkd.app.ui.style.GkShapes
 import li.gkd.app.ui.style.GkUi
@@ -46,7 +47,7 @@ import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.layout.DialogDefaults
 import top.yukonga.miuix.kmp.theme.LocalContentColor
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.window.WindowBottomSheet
+import top.yukonga.miuix.kmp.glass.GlassBottomSheet
 
 private data class DialogRegistration(
     val order: Long,
@@ -146,13 +147,18 @@ fun GkModalBottomSheet(
     onDismissFinished: () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    WindowBottomSheet(
-        show = show,
+    // 用 `GlassBottomSheet` 取代 `WindowBottomSheet`：渲染在根 scaffold 内，才能采样到页面内容
+    // 做真实背景模糊（独立 window 采不到，只能画半透明色）。它内部按
+    // `backdrop != null && isRuntimeShaderSupported()` 判定，条件不满足时退回 containerColor
+    // 实色，所以不支持 RuntimeShader 的设备外观与旧实现一致，无需分叉两条路径。
+    GlassBottomSheet(
         onDismissRequest = onDismissRequest,
-        onDismissFinished = onDismissFinished,
+        show = show,
+        backdrop = LocalLayerBackdrop.current,
         modifier = modifier,
         allowDismiss = allowDismiss,
         enableNestedScroll = enableNestedScroll,
+        onDismissFinished = onDismissFinished,
     ) {
         Column(content = content)
     }

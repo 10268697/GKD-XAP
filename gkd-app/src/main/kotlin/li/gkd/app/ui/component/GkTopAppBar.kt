@@ -2,13 +2,18 @@ package li.gkd.app.ui.component
 
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
+import li.gkd.app.ui.share.LocalGkGlassTopBar
+import li.gkd.app.ui.share.LocalLayerBackdrop
+import li.gkd.app.ui.share.LocalMiuixBlurActive
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.TopAppBarDefaults
+import top.yukonga.miuix.kmp.glass.GlassTopAppBar
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -42,6 +47,37 @@ fun GkTopAppBar(
     canScroll: Boolean = true,
     small: Boolean = false,
 ) {
+    // 玻璃顶栏：仅在「液态玻璃开启 + 页面有 backdrop + 调用方没改任何颜色 + 非 small」时启用。
+    // 自定义色（多选栏的破坏性红、图片查看器的白字、截图浮层的黑底）一律留在原 TopAppBar，
+    // 因为 GlassTopAppBar 的颜色由主题推导，没有 titleColor/largeTitleColor 入参。
+    val surfaceColor = MiuixTheme.colorScheme.surface
+    val glassBar = LocalMiuixBlurActive.current &&
+        !small &&
+        LocalLayerBackdrop.current != null &&
+        (color == Color.Transparent || color == surfaceColor) &&
+        titleColor == MiuixTheme.colorScheme.onSurface &&
+        largeTitleColor == MiuixTheme.colorScheme.onSurface &&
+        subtitleColor == MiuixTheme.colorScheme.onSurfaceVariantSummary
+    if (glassBar) {
+        CompositionLocalProvider(LocalGkGlassTopBar provides true) {
+            GlassTopAppBar(
+                title = titleText,
+                modifier = modifier,
+                // backdrop 传 null：模糊仍由外层壳的 textureBlur 负责，避免同一块顶栏被
+                // 采样两次；这里只取它的渐进色带（bandBrush）与玻璃按钮材质。
+                expandable = true,
+                backdrop = null,
+                largeTitle = titleText,
+                subtitle = subtitle,
+                scrollBehavior = if (canScroll) scrollBehavior else null,
+                navigationIcon = navigationIcon,
+                actions = actions,
+                bottomContent = bottomContent,
+                defaultWindowInsetsPadding = true,
+            )
+        }
+        return
+    }
     if (small) {
         SmallTopAppBar(
             title = titleText,

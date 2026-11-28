@@ -61,6 +61,9 @@ import top.yukonga.miuix.kmp.icon.basic.ArrowUpDown
 import top.yukonga.miuix.kmp.icon.basic.Search
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.glass.GlassIconButton
+import li.gkd.app.ui.share.LocalGkGlassTopBar
+import li.gkd.app.ui.share.LocalLayerBackdrop
 import top.yukonga.miuix.kmp.theme.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -141,27 +144,49 @@ fun GkIconButton(
 ) = GkTooltipIconButtonBox(
     contentDescription = contentDescription,
 ) {
-    IconButton(
-        modifier = modifier.semantics(mergeDescendants = true) {
-            // Miuix 0.9.4 omits clickable semantics entirely when disabled.
-            role = Role.Button
-            if (!enabled) disabled()
-            if (onClickLabel != null) {
-                this.onClick(label = onClickLabel, action = null)
-            }
-        },
-        enabled = enabled,
-        onClick = onClick,
-        backgroundColor = if (enabled) colors.containerColor else colors.disabledContainerColor,
-        minWidth = GkIconButtonDefaults.MinTouchTargetSize,
-        minHeight = GkIconButtonDefaults.MinTouchTargetSize,
-    ) {
-        GkIcon(
-            imageVector = imageVector,
-            contentDescription = contentDescription,
-            tint = if (enabled) colors.contentColor else colors.disabledContentColor,
-            animateMorph = animateMorph,
-        )
+    // 玻璃顶栏内用官方的玻璃底座，按钮材质和顶栏一致；页面其他位置仍是透明的 48dp 点击区。
+    if (enabled && LocalGkGlassTopBar.current) {
+        GlassIconButton(
+            onClick = onClick,
+            modifier = modifier.semantics(mergeDescendants = true) {
+                role = Role.Button
+                if (onClickLabel != null) {
+                    this.onClick(label = onClickLabel, action = null)
+                }
+            },
+            backdrop = LocalLayerBackdrop.current,
+            size = GkIconButtonDefaults.MinTouchTargetSize,
+        ) {
+            GkIcon(
+                imageVector = imageVector,
+                contentDescription = contentDescription,
+                tint = colors.contentColor,
+                animateMorph = animateMorph,
+            )
+        }
+    } else {
+        IconButton(
+            modifier = modifier.semantics(mergeDescendants = true) {
+                // Miuix 0.9.4 omits clickable semantics entirely when disabled.
+                role = Role.Button
+                if (!enabled) disabled()
+                if (onClickLabel != null) {
+                    this.onClick(label = onClickLabel, action = null)
+                }
+            },
+            enabled = enabled,
+            onClick = onClick,
+            backgroundColor = if (enabled) colors.containerColor else colors.disabledContainerColor,
+            minWidth = GkIconButtonDefaults.MinTouchTargetSize,
+            minHeight = GkIconButtonDefaults.MinTouchTargetSize,
+        ) {
+            GkIcon(
+                imageVector = imageVector,
+                contentDescription = contentDescription,
+                tint = if (enabled) colors.contentColor else colors.disabledContentColor,
+                animateMorph = animateMorph,
+            )
+        }
     }
 }
 

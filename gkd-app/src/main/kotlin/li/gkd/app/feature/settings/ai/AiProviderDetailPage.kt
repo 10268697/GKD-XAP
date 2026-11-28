@@ -45,6 +45,7 @@ import li.gkd.app.data.settings.AiEndpointMode
 import li.gkd.app.store.AppStore.storeFlow
 import li.gkd.app.ui.component.GkIcon
 import li.gkd.app.ui.component.GkIconButton
+import li.gkd.app.ui.share.LocalLayerBackdrop
 import li.gkd.app.ui.component.GkIcons
 import li.gkd.app.ui.component.GkPageBottomSpace
 import li.gkd.app.ui.component.GkPageScaffold
@@ -61,7 +62,7 @@ import li.gkd.app.util.findOption
 import li.gkd.app.util.launchLogged
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.TabRow
+import top.yukonga.miuix.kmp.glass.GlassTabRow
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
@@ -106,10 +107,13 @@ fun AiProviderDetailPage(route: AiProviderDetailRoute) {
                 .imePadding(),
         ) {
             if (!isNew) {
-                TabRow(
+                // 玻璃 TabRow：backdrop 为 null 或设备不支持 RuntimeShader 时，内部会把
+                // surfaceAlpha 收敛到 0，自动退化成普通外观。
+                GlassTabRow(
                     tabs = listOf("配置", "模型"),
-                    selectedTabIndex = tab,
-                    onTabSelected = { tab = it },
+                    selectedIndex = tab,
+                    onSelect = { tab = it },
+                    backdrop = LocalLayerBackdrop.current,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
