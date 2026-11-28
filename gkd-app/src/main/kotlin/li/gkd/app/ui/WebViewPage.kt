@@ -182,6 +182,22 @@ private data class DocConfig(
     val htmlUrlMap: Map<String, String>
 )
 
+/**
+ * 文档站路径映射表。`shouldInterceptRequest` 对**每一次**主框架导航都会调用，
+ * 原来每次都要先拉一遍这个 json 再拉正文：两次串行请求，配合 15s/30s 的超时，
+ * 最坏一次点击要白屏 45 秒。映射表几乎不变，进程内缓存即可，失败不写入缓存下次重试。
+ * 正文保持实时拉取，避免文档更新后读到旧内容。
+ */
+private object DocConfigCache {
+    @Volatile
+    private var cached: DocConfig? = null
+
+    suspend fun get(): DocConfig {
+        cached?.let { return it }
+        return client.get(DOC_CONFIG_URL).body<DocConfig>().also { cached = it }
+    }
+}
+
 private class GkdWebViewClient() : AccompanistWebViewClient() {
     override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
@@ -212,7 +228,7 @@ private class GkdWebViewClient() : AccompanistWebViewClient() {
             if (request != null && request.run { isForMainFrame && url.host == "gkd.li" && method == "GET" }) {
                 LogUtils.d(request.method, request.url)
                 runBlocking(Dispatchers.IO) {
-                    val docConfig = client.get(DOC_CONFIG_URL).body<DocConfig>()
+                    val docConfig = DocConfigCache.get()
                     val path = request.url.path.let { if (it.isNullOrEmpty()) "/" else it }
                     val textUrl = docConfig.htmlUrlMap[path]?.let { docConfig.mirrorBaseUrl + it }
                     if (textUrl != null) {

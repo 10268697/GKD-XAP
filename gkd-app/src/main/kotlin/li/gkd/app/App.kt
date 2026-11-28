@@ -107,8 +107,11 @@ data class AppMeta(
     val tagName: String? = getMetaString("tagName").takeIf { it.isNotEmpty() },
     val debuggable: Boolean = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0,
     val versionCode: Int = selfAppInfo.versionCode,
-    val versionName: String = selfAppInfo.versionName!!,
-    val appId: String = app.packageName!!,
+    // 不能在这里用 `!!`：AppMeta 是 @Serializable 的默认值构造，META 在 Application.onCreate
+    // 期间就会被解析，一旦空断言失败就是启动即崩、没有任何降级路径。versionName 理论上总有值，
+    // 但被系统裁剪过签名/版本的包、以及极少数定制 ROM 会返回 null。
+    val versionName: String = selfAppInfo.versionName ?: "unknown",
+    val appId: String = app.packageName,
     val appName: String = app.getString(R.string.app_name)
 ) {
     // REPOSITORY_URL 结尾没有斜杠，原来那种「base + "tree/…"」的拼法会直接粘成 GKD-XAtree/…
@@ -195,14 +198,25 @@ class App : Application() {
         return resolveAppId(intent)
     }
 
-    fun startLaunchActivity() {
-        val intent = packageManager.getLaunchIntentForPackage(META.appId)!!
+    /**
+     * 拉起自身主界面。`getLaunchIntentForPackage` 在「自身被系统停用/冻结、工作资料隔离、
+     * 包可见性被裁剪」时会返回 null，原来直接 `!!` 就是一次崩溃——而这几种场景恰恰是用户
+     * 最需要「回到设置页去解冻」的时候。改为退回一条显式 LAUNCHER intent，仍失败就放弃，
+     * 由调用方决定后续（崩溃重启路径会连着两次失败就停止重试，避免重启死循环）。
+     */
+    fun startLaunchActivity(): Boolean {
+        val intent = packageManager.getLaunchIntentForPackage(META.appId)
+            ?: Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_LAUNCHER)
+                .setPackage(META.appId)
         intent.addFlags(
             Intent.FLAG_ACTIVITY_NEW_TASK
                     or Intent.FLAG_ACTIVITY_CLEAR_TOP
                     or Intent.FLAG_ACTIVITY_CLEAR_TASK
         )
-        startActivity(intent)
+        return runCatching { startActivity(intent) }
+            .onFailure { Log.e("GkdLaunch", "Unable to launch self", it) }
+            .isSuccess
     }
 
     fun checkGrantedPermission(permission: String) = ContextCompat.checkSelfPermission(

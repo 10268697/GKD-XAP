@@ -248,6 +248,9 @@ fun SubsAppListPage(route: SubsAppListRoute) {
                     },
                     onSelect = { selection.toggle(app.id) },
                     onClick = throttle {
+                        // 只 requestHide 不 clearFocus 的话，被盖住的搜索框仍持有焦点，
+                        // 输入法会在新页面布局稳定后自己弹回来（键盘「弹两次」）。
+                        focusManager.clearFocus()
                         context.imeController.requestHide()
                         mainVm.navigatePage(SubsAppGroupListRoute(subsItemId, app.id))
                     },

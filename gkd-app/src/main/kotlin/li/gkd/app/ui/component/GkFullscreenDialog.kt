@@ -28,7 +28,11 @@ fun GkFullscreenDialog(
         windowTitle = UiStrings.fullscreen_dialog,
     )
 ) {
-    val activity = LocalActivity.current!!
+    // 全屏铺满要靠宿主 Activity 的 window 尺寸与属性，缺了就没法工作；
+    // 用 checkNotNull 给出可定位的信息，而不是一句裸 NPE。
+    val activity = checkNotNull(LocalActivity.current) {
+        "GkFullscreenDialog requires LocalActivity (host it inside an Activity-provided composition)"
+    }
     val parentView = LocalView.current.parent as View
     val dialogWindow = (parentView as DialogWindowProvider).window
     SideEffect {

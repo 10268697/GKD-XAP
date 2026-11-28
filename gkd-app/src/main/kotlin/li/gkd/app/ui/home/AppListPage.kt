@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
@@ -71,6 +72,7 @@ import li.gkd.app.ui.component.rememberListScrollState
 fun useAppListPage(): ScaffoldExt {
     val mainVm = MainViewModel.requireCurrent()
     val context = LocalActivity.current as MainActivity
+    val focusManager = LocalFocusManager.current
 
     val vm = viewModel { AppListVm(mainVm) }
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -240,6 +242,9 @@ fun useAppListPage(): ScaffoldExt {
                             if (editWhiteListMode) {
                                 vm.toggleWhiteList(appInfo.id)
                             } else {
+                                // requestHide 只收键盘、不还焦点；被盖住的搜索框仍持有焦点时，
+                                // 输入法会在新页面布局变化后自己弹回来，表现为「键盘弹两次」。
+                                focusManager.clearFocus()
                                 context.imeController.requestHide()
                                 mainVm.navigatePage(AppConfigRoute(appInfo.id))
                             }

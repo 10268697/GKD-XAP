@@ -11,6 +11,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalFocusManager
+import kotlin.reflect.KClass
 import top.yukonga.miuix.kmp.nav.core.NavKey
 import top.yukonga.miuix.kmp.nav.core.NavDisplay
 import top.yukonga.miuix.kmp.nav.core.NavEntryBuilder
@@ -118,6 +119,22 @@ private fun NavEntryBuilder.mainRoutes() {
     entry<SubsCategoryGroupRoute> { SubsCategoryGroupPage(it) }
 }
 
+/**
+ * 进页面当帧就自己抢焦点的路由。这些页面内部的输入区用
+ * `autoFocus(immediateFocus = true)` / `FocusRequester.requestFocus()` 主动要焦点，
+ * 前进导航时不能替它们 clearFocus，否则刚到手的焦点会被父节点的 effect 打掉。
+ *
+ * 新增「进页面即输入」的页面时必须加进来，否则键盘不会自动弹出。
+ */
+private val selfFocusRouteClasses: Set<KClass<*>> = setOf(
+    UpsertRuleGroupRoute::class,
+    CategoryEditorRoute::class,
+    RuleExcludeEditorRoute::class,
+    A11YScopeAppListRoute::class,
+    BlockA11yAppListRoute::class,
+    EditBlockAppListRoute::class,
+)
+
 @Composable
 fun MainNavigation() {
     val mainVm = MainViewModel.requireCurrent()
@@ -125,10 +142,11 @@ fun MainNavigation() {
     // 在编辑器页点过输入框、返回后键盘还挂着、光标在看不见的上一页闪。
     // 上游 miuix-nav 在 7052841 里修了这个，但那是库内私有实现，这里做应用侧等价处理。
     //
-    // 只在「栈变浅 = 返回」时清，前进方向不能清：有 5 个页面用
-    // autoFocus(immediateFocus = true) 在进页面当帧就抢焦点（CategoryEditorPage、
-    // UpsertRuleGroupPage、RuleExcludeEditorPage、A11yScopeAppListPage、
-    // BlockA11yAppListPage），而父节点的 effect 在子节点之后执行，一起清会把它们全部打掉。
+    // 前进方向同样要交还焦点：被盖住的页面继续保持 composed，若上一页的搜索框仍持有焦点，
+    // 输入法会跟着到新页面上（新页面再抢焦点时输入法连接重建，表现为键盘连弹两次）。
+    // 唯一例外是「进页面当帧就自己抢焦点」的页面——它们靠 autoFocus(immediateFocus = true)
+    // 在子节点 effect 里请求焦点，而本 effect 在子节点之后执行，一起清会把新页面刚拿到的
+    // 焦点也打掉，所以按路由排除。
     val focusManager = LocalFocusManager.current
     val topKey = mainVm.backStack.lastOrNull()
     val stackSize = mainVm.backStack.size
@@ -136,8 +154,12 @@ fun MainNavigation() {
     DisposableEffect(topKey, stackSize) {
         val previous = previousTop.value
         previousTop.value = topKey to stackSize
-        if (previous != null && previous.second > stackSize && previous.first != topKey) {
-            focusManager.clearFocus()
+        if (previous != null && previous.first != topKey) {
+            val wentBack = previous.second > stackSize
+            val destinationWantsFocus = topKey != null && topKey::class in selfFocusRouteClasses
+            if (wentBack || !destinationWantsFocus) {
+                focusManager.clearFocus()
+            }
         }
         onDispose { }
     }

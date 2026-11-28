@@ -162,6 +162,8 @@ private fun useLoadedSubsManagePage(
             TextMenu(
                 title = UiStrings.subscriptions_update,
                 option = UpdateTimeOption.objects.findOption(store.updateSubsInterval),
+                // 弹窗里没有 Miuix Scaffold 承载玻璃弹层，走独立窗口版本。
+                glass = false,
                 onOptionChange = { vm.setUpdateInterval(it.value) },
             )
             TextSwitch(
