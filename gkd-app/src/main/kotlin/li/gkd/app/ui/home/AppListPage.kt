@@ -57,7 +57,7 @@ import li.gkd.app.ui.component.PerfDropdownMenu
 import li.gkd.app.ui.component.PerfCheckbox
 import li.gkd.app.ui.component.AppIcon
 import androidx.compose.foundation.layout.fillMaxWidth
-import li.gkd.app.ui.component.AppBarTextField
+import li.gkd.app.ui.component.GkAppBarTextField
 import li.gkd.app.ui.component.MenuGroupCard
 import li.gkd.app.ui.component.MenuItemCheckbox
 import li.gkd.app.ui.component.MenuItemRadioButton
@@ -113,7 +113,7 @@ fun useAppListPage(): ScaffoldExt {
                                 vm.closeSearch()
                             }
                         }
-                        AppBarTextField(
+                        GkAppBarTextField(
                             value = searchStr,
                             onValueChange = vm::setSearchText,
                             hint = UiStrings.app_name_id_input_hint,
