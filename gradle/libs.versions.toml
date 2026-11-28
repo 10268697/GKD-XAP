@@ -18,7 +18,7 @@ remap = "0.1.7"
 shizuku = "13.1.5"
 priv-kit = "0.20.0"
 codeorigin = "0.2.3"
-miuix = "0.9.5-rc01"
+miuix = "0.9.5-rc02"
 loc = "0.7.1"
 
 [libraries]
