@@ -45,7 +45,6 @@ import li.gkd.app.data.settings.AiEndpointMode
 import li.gkd.app.store.AppStore.storeFlow
 import li.gkd.app.ui.component.GkIcon
 import li.gkd.app.ui.component.GkIconButton
-import li.gkd.app.ui.share.LocalLayerBackdrop
 import li.gkd.app.ui.component.GkIcons
 import li.gkd.app.ui.component.GkPageBottomSpace
 import li.gkd.app.ui.component.GkPageScaffold
@@ -62,7 +61,7 @@ import li.gkd.app.util.findOption
 import li.gkd.app.util.launchLogged
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.glass.GlassTabRow
+import top.yukonga.miuix.kmp.basic.TabRow
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
@@ -107,13 +106,15 @@ fun AiProviderDetailPage(route: AiProviderDetailRoute) {
                 .imePadding(),
         ) {
             if (!isNew) {
-                // 玻璃 TabRow：backdrop 为 null 或设备不支持 RuntimeShader 时，内部会把
-                // surfaceAlpha 收敛到 0，自动退化成普通外观。
-                GlassTabRow(
+                // 这里只能用非玻璃的 TabRow。GkPageScaffold 会把页面内容录进 LayerBackdrop
+                // 的 graphicsLayer，玻璃组件在页内绘制时又会 drawLayer(同一个层)，等于让
+                // 显示列表包含「画我自己」，回放时无限递归，原生栈溢出直接终止进程（v1.5.10
+                // 进这一页必闪退）。玻璃版本要么放进顶栏/弹层这些录制区之外的位置，要么把
+                // backdrop 传 null，页内一律不采样自身的背景。
+                TabRow(
                     tabs = listOf("配置", "模型"),
-                    selectedIndex = tab,
-                    onSelect = { tab = it },
-                    backdrop = LocalLayerBackdrop.current,
+                    selectedTabIndex = tab,
+                    onTabSelected = { tab = it },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
