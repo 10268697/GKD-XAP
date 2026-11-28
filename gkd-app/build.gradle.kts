@@ -29,8 +29,8 @@ android {
     namespace = "li.gkd.app"
     defaultConfig {
         applicationId = "li.songe.gkdxap"
-        versionCode = 159
-        versionName = "1.5.8"
+        versionCode = 160
+        versionName = "1.5.9"
 
         vectorDrawables {
             useSupportLibrary = true
